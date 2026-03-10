@@ -1,20 +1,19 @@
 from typing import Dict
 
-from pipeline.config.settings import settings
-from pipeline.loaders.ingredient_loader import load_target_ingredients
-from pipeline.repositories.paper_repository import (
+from pipeline.common.config.settings import settings
+from pipeline.common.loaders.ingredient_loader import load_target_ingredients
+from pipeline.common.repositories.paper_repository import (
     get_connection,
     upsert_many_paper_metadata,
 )
-from pipeline.services.pubmed_client import PubMedClient
-from pipeline.services.pubmed_parser import parse_pubmed_xml
-from pipeline.services.query_builder import build_pubmed_query
+from pipeline.metadata.services.pubmed_client import PubMedClient
+from pipeline.metadata.services.pubmed_parser import parse_pubmed_xml
+from pipeline.metadata.services.query_builder import build_pubmed_query
 
 
 def validate_environment() -> None:
     if not settings.database_url:
         raise RuntimeError("DATABASE_URL is not set. Check your .env file.")
-
     if not settings.ncbi_email:
         raise RuntimeError("NCBI_EMAIL is not set. Please add it to .env.")
 

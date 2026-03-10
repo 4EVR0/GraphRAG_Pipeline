@@ -1,10 +1,10 @@
 import os
 from dataclasses import dataclass
-from dotenv import load_dotenv
 from pathlib import Path
 
-# 프로젝트 루트 기준으로 .env 로드
-BASE_DIR = Path(__file__).resolve().parents[2]
+from dotenv import load_dotenv
+
+BASE_DIR = Path(__file__).resolve().parents[3]
 ENV_PATH = BASE_DIR / ".env"
 
 load_dotenv(ENV_PATH)

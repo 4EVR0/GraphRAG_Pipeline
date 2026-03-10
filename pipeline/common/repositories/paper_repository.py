@@ -3,7 +3,7 @@ from typing import Iterable
 import psycopg2
 from psycopg2.extensions import connection
 
-from pipeline.models.paper_record import PaperRecord
+from pipeline.common.models.paper_record import PaperRecord
 
 
 UPSERT_PAPER_METADATA_SQL = """
@@ -58,10 +58,8 @@ def get_connection(database_url: str) -> connection:
 
 def upsert_many_paper_metadata(conn: connection, records: Iterable[PaperRecord]) -> int:
     count = 0
-
     with conn.cursor() as cur:
         for record in records:
             cur.execute(UPSERT_PAPER_METADATA_SQL, record.to_dict())
             count += 1
-
     return count

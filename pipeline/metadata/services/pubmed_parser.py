@@ -1,7 +1,7 @@
 from typing import List, Optional
 from xml.etree import ElementTree as ET
 
-from pipeline.models.paper_record import PaperRecord
+from pipeline.common.models.paper_record import PaperRecord
 
 
 def extract_text(elem: Optional[ET.Element]) -> Optional[str]:
@@ -30,7 +30,6 @@ def parse_pubmed_xml(xml_text: str) -> List[PaperRecord]:
                 text = extract_text(ab)
                 if not text:
                     continue
-
                 label = ab.attrib.get("Label")
                 abstract_parts.append(f"{label}: {text}" if label else text)
 

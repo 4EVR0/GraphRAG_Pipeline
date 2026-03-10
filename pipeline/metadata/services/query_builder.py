@@ -31,14 +31,12 @@ def deduplicate_terms(terms: List[str]) -> List[str]:
 def build_ingredient_part(query_name: str, alias_list: str | None = None) -> str:
     terms = [query_name.strip()] + parse_pipe_list(alias_list)
     unique_terms = deduplicate_terms(terms)
-
     return "(" + " OR ".join([f'"{term}"[Title/Abstract]' for term in unique_terms]) + ")"
 
 
 def build_context_part(concern_keywords: str | None = None) -> str:
     concern_terms = parse_pipe_list(concern_keywords)
     all_terms = deduplicate_terms(DEFAULT_DOMAIN_TERMS + concern_terms)
-
     return "(" + " OR ".join([f'"{term}"[Title/Abstract]' for term in all_terms]) + ")"
 
 
@@ -49,5 +47,4 @@ def build_pubmed_query(
 ) -> str:
     ingredient_part = build_ingredient_part(query_name, alias_list)
     context_part = build_context_part(concern_keywords)
-
     return f"{ingredient_part} AND {context_part}"

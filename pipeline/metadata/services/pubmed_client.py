@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
-from pipeline.config.settings import settings
+from pipeline.common.config.settings import settings
 
 
 class PubMedClient:
