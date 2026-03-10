@@ -1,2 +1,25 @@
-data/
+# python
+__pycache__/
+*.pyc
+*.pyo
+
+# virtual env
+venv/
+mvenv/
+.env
+
+# mac
 .DS_Store
+
+# logs
+*.log
+
+# vscode
+.vscode/
+
+# jupyter
+.ipynb_checkpoints
+
+# data outputs
+data/tmp/
+data/cache/
