@@ -8,3 +8,6 @@ tqdm
 spacy
 scispacy
 pysbd
+
+#LLM api
+openai

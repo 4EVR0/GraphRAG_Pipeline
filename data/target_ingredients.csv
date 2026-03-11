@@ -1,6 +1,6 @@
-ingredient_code,canonical_name,query_name,alias_list,concern_keywords,is_target
-1,Niacinamide,Niacinamide,"Nicotinamide","acne|barrier|hyperpigmentation|inflammation",true
-2,Panthenol,Panthenol,"Provitamin B5|Dexpanthenol","barrier|hydration|irritation|wound healing",true
-3,Salicylic Acid,Salicylic Acid,"BHA|Beta Hydroxy Acid","acne|comedones|keratolytic|exfoliation",true
-4,Ceramide,Ceramide,"Ceramide NP|Ceramides","barrier|hydration|dry skin|sensitive skin",true
-5,Tranexamic Acid,Tranexamic Acid,"TXA","melasma|hyperpigmentation|pigmentation|dyschromia",true
+canonical_name,query_name,alias_list,exclude_if_contains,is_target
+Niacinamide,niacinamide,"niacinamide|nicotinamide","nicotinamide adenine dinucleotide|nicotinamide adenine dinucleotide phosphate|nicotinamide mononucleotide|nicotinamide riboside|nad|nadh|nadph",true
+Ceramide,ceramide,"ceramide|ceramides","ceramide synthase|ceramide-1-phosphate",true
+Panthenol,panthenol,"panthenol|d-panthenol|dexpanthenol","",true
+Tranexamic acid,tranexamic acid,"tranexamic acid|txa","",true
+Salicylic acid,salicylic acid,"salicylic acid|bha","",true

@@ -1,113 +1,142 @@
 import csv
-from typing import Dict, List
+import re
+from typing import Dict, List, Optional
 
 from pipeline.common.config.settings import settings
 
 
-EFFICACY_KEYWORDS = [
-    "improve", "improved", "improves",
-    "reduce", "reduced", "reduces",
-    "increase", "increased", "increases",
-    "effective", "efficacy", "benefit", "beneficial",
-]
-
-SAFETY_KEYWORDS = [
-    "safe", "safety", "adverse event", "adverse events",
-    "tolerable", "tolerability", "irritation", "side effect",
-    "side effects", "complication", "complications",
-]
-
-MECHANISM_KEYWORDS = [
-    "mechanism", "pathway", "inhibit", "inhibition",
-    "regulate", "regulation", "stimulate", "stimulation",
-    "suppress", "suppression",
-]
-
-
 class ClaimExtractor:
     def __init__(self) -> None:
-        self.ingredient_terms = self._load_ingredient_terms()
+        self.ingredient_rules = self._load_ingredient_rules()
+        self.allowed_canonical_ingredients = set(self.ingredient_rules.keys())
 
-    def _load_ingredient_terms(self) -> Dict[str, List[str]]:
-        terms_map: Dict[str, List[str]] = {}
+    def _split_pipe_field(self, value: str) -> List[str]:
+        if not value:
+            return []
+        return [item.strip() for item in value.split("|") if item.strip()]
+
+    def _normalize_unique(self, items: List[str]) -> List[str]:
+        unique_items: List[str] = []
+        seen = set()
+
+        for item in items:
+            key = item.lower().strip()
+            if not key:
+                continue
+            if key in seen:
+                continue
+            seen.add(key)
+            unique_items.append(item.strip())
+
+        return unique_items
+
+    def _load_ingredient_rules(self) -> Dict[str, Dict[str, List[str]]]:
+        rules: Dict[str, Dict[str, List[str]]] = {}
 
         with open(settings.target_csv_path, "r", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
+
             for row in reader:
                 if row.get("is_target", "").strip().lower() != "true":
                     continue
 
                 canonical_name = row["canonical_name"].strip()
-                query_name = row["query_name"].strip()
+                query_name = row.get("query_name", "").strip()
                 alias_list = row.get("alias_list", "")
+                exclude_if_contains = row.get("exclude_if_contains", "")
 
-                terms = [canonical_name, query_name]
-                if alias_list:
-                    terms.extend([a.strip() for a in alias_list.split("|") if a.strip()])
+                aliases = [canonical_name]
+                if query_name:
+                    aliases.append(query_name)
+                aliases.extend(self._split_pipe_field(alias_list))
+                aliases = self._normalize_unique(aliases)
 
-                unique_terms = []
-                seen = set()
-                for term in terms:
-                    key = term.lower()
-                    if key not in seen:
-                        seen.add(key)
-                        unique_terms.append(term)
+                excludes = self._split_pipe_field(exclude_if_contains)
+                excludes = self._normalize_unique(excludes)
 
-                terms_map[canonical_name] = unique_terms
+                rules[canonical_name] = {
+                    "aliases": aliases,
+                    "excludes": excludes,
+                }
 
-        return terms_map
+        return rules
 
-    def classify_claim_type(self, text: str) -> str:
-        lower = text.lower()
+    def _contains_term(self, text: str, term: str) -> bool:
+        pattern = r"\b" + re.escape(term.lower()) + r"\b"
+        return re.search(pattern, text.lower()) is not None
 
-        if any(keyword in lower for keyword in SAFETY_KEYWORDS):
-            return "safety"
-        if any(keyword in lower for keyword in MECHANISM_KEYWORDS):
-            return "mechanism"
-        if any(keyword in lower for keyword in EFFICACY_KEYWORDS):
-            return "efficacy"
-
-        return "efficacy"
-
-    def classify_evidence_direction(self, text: str) -> str:
-        lower = text.lower()
-
-        negative_patterns = [
-            "no significant difference",
-            "not significant",
-            "did not improve",
-            "did not reduce",
-            "no effect",
-            "ineffective",
-        ]
-        if any(pattern in lower for pattern in negative_patterns):
-            return "neutral"
-
-        positive_patterns = [
-            "significantly reduced",
-            "significantly improved",
-            "improved",
-            "reduced",
-            "effective",
-            "beneficial",
-            "safe",
-        ]
-        if any(pattern in lower for pattern in positive_patterns):
-            return "supports"
-
-        return "neutral"
+    def _contains_exclude_pattern(self, text: str, pattern: str) -> bool:
+        return pattern.lower() in text.lower()
 
     def extract_ingredient_names(self, text: str) -> List[str]:
-        lower = text.lower()
+        text = text.strip()
+        if not text:
+            return []
+
         found: List[str] = []
 
-        for canonical_name, terms in self.ingredient_terms.items():
-            for term in terms:
-                if term.lower() in lower:
-                    found.append(canonical_name)
-                    break
+        for canonical_name, rule in self.ingredient_rules.items():
+            aliases = rule["aliases"]
+            excludes = rule["excludes"]
+
+            alias_matched = any(self._contains_term(text, alias) for alias in aliases)
+            if not alias_matched:
+                continue
+
+            exclude_matched = any(
+                self._contains_exclude_pattern(text, exclude_pattern)
+                for exclude_pattern in excludes
+            )
+            if exclude_matched:
+                continue
+
+            found.append(canonical_name)
 
         return found
+
+    def normalize_ingredient_name(self, ingredient_name: str) -> Optional[str]:
+        """
+        LLM이 반환한 ingredient를 canonical ingredient로 정규화한다.
+        우선순위:
+        1) canonical exact match
+        2) alias exact-ish match
+        3) canonical/alias substring containment (보수적으로)
+        """
+        raw = ingredient_name.strip()
+        if not raw:
+            return None
+
+        # 1) canonical exact match
+        for canonical_name in self.allowed_canonical_ingredients:
+            if raw.lower() == canonical_name.lower():
+                return canonical_name
+
+        # 2) alias exact-ish match
+        for canonical_name, rule in self.ingredient_rules.items():
+            for alias in rule["aliases"]:
+                if raw.lower() == alias.lower():
+                    return canonical_name
+
+        # 3) substring containment fallback
+        # 예: "Ceramide NP C15" -> "Ceramide"
+        # 예: "Dexpanthenol" -> "Panthenol" (alias로 잡히면 2단계에서 먼저 해결됨)
+        for canonical_name, rule in self.ingredient_rules.items():
+            candidates = [canonical_name] + rule["aliases"]
+
+            for candidate in candidates:
+                candidate_lower = candidate.lower()
+                raw_lower = raw.lower()
+
+                if candidate_lower and candidate_lower in raw_lower:
+                    return canonical_name
+
+        return None
+
+    def is_allowed_ingredient(self, ingredient_name: str) -> bool:
+        return ingredient_name.strip() in self.allowed_canonical_ingredients
+
+    def get_allowed_ingredient_names(self) -> List[str]:
+        return sorted(self.allowed_canonical_ingredients)
 
     def extract_effect_ids(self, text: str, effect_rows: List[Dict]) -> List[int]:
         lower = text.lower()
@@ -140,7 +169,7 @@ class ClaimExtractor:
             if any(candidate in lower for candidate in candidates):
                 matched_effect_ids.append(effect_id)
 
-        return matched_effect_ids
+        return list(sorted(set(matched_effect_ids)))
 
     def extract_concern_ids(self, text: str, concern_rows: List[Dict]) -> List[int]:
         lower = text.lower()
@@ -173,23 +202,48 @@ class ClaimExtractor:
             if any(candidate in lower for candidate in candidates):
                 matched_concern_ids.append(concern_id)
 
-        return matched_concern_ids
+        return list(sorted(set(matched_concern_ids)))
 
-    def extract_claim(
+    def build_claim_row(
         self,
-        chunk_text: str,
-        effect_rows: List[Dict],
-        concern_rows: List[Dict],
+        chunk: Dict,
+        sentence: str,
+        validated_claim: Dict,
+        extraction_method: str = "llm",
     ) -> Dict:
         return {
-            "claim_text": chunk_text,
-            "normalized_summary": chunk_text[:500],
-            "claim_type": self.classify_claim_type(chunk_text),
-            "evidence_direction": self.classify_evidence_direction(chunk_text),
-            "confidence_score": 0.6,
-            "ingredient_names": self.extract_ingredient_names(chunk_text),
-            "effect_ids": self.extract_effect_ids(chunk_text, effect_rows),
-            "concern_ids": self.extract_concern_ids(chunk_text, concern_rows),
+            "paper_id": chunk["paper_id"],
+            "chunk_id": chunk["chunk_id"],
+            "claim_text": sentence.strip(),
+            "normalized_summary": (
+                f'{validated_claim["ingredient"]} '
+                f'{validated_claim["relation"]} '
+                f'{validated_claim["target"]}'
+            ),
+            "claim_type": validated_claim["claim_type"],
+            "evidence_direction": validated_claim["evidence_direction"],
+            "confidence_score": validated_claim["confidence"],
+            "section_type": chunk["section_type"],
+            "extraction_method": extraction_method,
+            "source_sentence": sentence.strip(),
+            "source_start_offset": chunk["source_start_offset"],
+            "source_end_offset": chunk["source_end_offset"],
+        }
+
+    def infer_taxonomy_maps(
+        self,
+        validated_claim: Dict,
+        effect_rows: List[Dict],
+        concern_rows: List[Dict],
+    ) -> Dict[str, List[int]]:
+        target_text = validated_claim["target"]
+
+        effect_ids = self.extract_effect_ids(target_text, effect_rows)
+        concern_ids = self.extract_concern_ids(target_text, concern_rows)
+
+        return {
+            "effect_ids": effect_ids,
+            "concern_ids": concern_ids,
         }
 
 
