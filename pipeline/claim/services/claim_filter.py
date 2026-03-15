@@ -23,6 +23,8 @@ HARD_NON_CLAIM_PATTERNS = [
 ]
 
 CLAIM_MARKERS = [
+
+    # 기존
     "improved",
     "improves",
     "reduced",
@@ -37,34 +39,42 @@ CLAIM_MARKERS = [
     "restores",
     "suppressed",
     "suppresses",
-    "effective",
-    "efficacious",
-    "safe",
-    "well tolerated",
-    "tolerated",
-    "associated with improvements",
-    "associated with improvement",
-    "associated with cost savings",
-    "cost-effective",
-    "cost saving",
-    "benefits",
-    "quality-of-life benefits",
-    "significantly increased",
-    "significantly reduced",
-    "significantly improved",
-    "significantly decreased",
-    "increased hydration",
-    "improved barrier",
-    "barrier repair",
-    "anti-acne",
-    "soothing",
-    "repairing",
-    "texture-improving",
-    "lowered",
-    "inhibiting",
-    "inhibited",
-    "stimulated",
-    "modulated",
+
+    # 추가 (논문에서 매우 흔함)
+    "improvement",
+    "improvements",
+    "demonstrated",
+    "demonstrates",
+    "showed",
+    "shown",
+    "showing",
+    "suggest",
+    "suggests",
+    "indicate",
+    "indicates",
+    "associated with",
+    "resulted in",
+    "led to",
+
+    # 임상 표현
+    "may reduce",
+    "may improve",
+    "may enhance",
+    "may offer",
+    "offer greater protection",
+
+    # 피부 관련
+    "prevent",
+    "prevents",
+    "protect",
+    "protects",
+
+    # 화장품 claim
+    "hydration",
+    "barrier function",
+    "hyperpigmentation",
+    "melasma",
+    "photoaging",
 ]
 
 NEGATION_MARKERS = [
@@ -89,6 +99,12 @@ def is_claim_candidate_sentence(sentence: str) -> bool:
 
     if any(pattern in lower for pattern in HARD_NON_CLAIM_PATTERNS):
         return False
+
+    if lower.startswith("results:") or lower.startswith("result:"):
+        return True
+
+    if lower.startswith("conclusion:") or lower.startswith("conclusions:"):
+        return True
 
     if any(marker in lower for marker in CLAIM_MARKERS):
         return True

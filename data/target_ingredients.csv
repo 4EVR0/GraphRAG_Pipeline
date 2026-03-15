@@ -1,5 +1,5 @@
 canonical_name,query_name,alias_list,exclude_if_contains,is_target
-Niacinamide,niacinamide,"niacinamide|nicotinamide","nicotinamide adenine dinucleotide|nicotinamide adenine dinucleotide phosphate|nicotinamide mononucleotide|nicotinamide riboside|nad|nadh|nadph",true
+Niacinamide,Niacinamide,"Nicotinamide|NIA","nicotinamide adenine dinucleotide|NAD|NAD+|NADH|NADP|NADPH|NMN|nicotinamide riboside|nicotinamide mononucleotide",true
 Ceramide,ceramide,"ceramide|ceramides","ceramide synthase|ceramide-1-phosphate",true
 Panthenol,panthenol,"panthenol|d-panthenol|dexpanthenol","",true
 Tranexamic acid,tranexamic acid,"tranexamic acid|txa","",true

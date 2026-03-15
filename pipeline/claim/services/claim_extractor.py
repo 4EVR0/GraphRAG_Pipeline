@@ -68,9 +68,283 @@ class ClaimExtractor:
     def _contains_exclude_pattern(self, text: str, pattern: str) -> bool:
         return pattern.lower() in text.lower()
 
+    def _has_skin_context(self, text: str) -> bool:
+        lower = text.lower()
+
+        skin_terms = [
+            "skin",
+            "topical",
+            "cosmetic",
+            "cosmeceutical",
+            "dermatology",
+            "dermatologic",
+            "epidermis",
+            "epidermal",
+            "cutaneous",
+            "facial",
+            "barrier",
+            "skin barrier",
+            "hydration",
+            "hydrate",
+            "hydrating",
+            "moisturizing",
+            "moisturization",
+            "transepidermal water loss",
+            "tewl",
+            "pigmentation",
+            "hyperpigmentation",
+            "melasma",
+            "pih",
+            "photoaging",
+            "photodamaged",
+            "photo-damaged",
+            "uv",
+            "uvb",
+            "erythema",
+            "redness",
+            "acne",
+            "wrinkle",
+            "wrinkles",
+            "elasticity",
+            "irritation",
+            "sensitive skin",
+            "dry skin",
+            "brightening",
+            "depigmenting",
+            "wound healing",
+            "repair",
+            "anti-aging",
+            "laser-induced pih",
+            "infraorbital hyperpigmentation",
+            "immunosuppression",
+        ]
+        return any(term in lower for term in skin_terms)
+
+    def _is_blocked_non_cosmetic_domain(self, text: str) -> bool:
+        """
+        피부/화장품 추천 목적과 명확히 동떨어진 문맥만 차단한다.
+        너무 공격적으로 막으면 좋은 피부 논문도 날아가므로 최소 차단만 적용.
+        """
+        lower = text.lower()
+
+        blocked_terms = [
+            "perioperative",
+            "cardiac surgery",
+            "ostomy",
+            "payer",
+            "population perspective",
+            "cost-effective",
+            "cost effective",
+            "cost-saving",
+            "cost saving",
+            "quality-of-life",
+            "quality of life",
+            "seroma risk",
+            "postoperative",
+            "surgical drain",
+            "breast reconstruction",
+        ]
+
+        return any(term in lower for term in blocked_terms)
+
+    def _is_results_or_conclusion_sentence(self, text: str) -> bool:
+        lower = text.lower().strip()
+
+        return (
+            lower.startswith("results:")
+            or lower.startswith("result:")
+            or lower.startswith("conclusion:")
+            or lower.startswith("conclusions:")
+        )
+
+    def _is_study_design_sentence(self, text: str) -> bool:
+        """
+        목표/배경/방법 문장만 차단한다.
+        RESULTS/CONCLUSION 문장은 차단하지 않는다.
+        """
+        lower = text.lower().strip()
+
+        if self._is_results_or_conclusion_sentence(text):
+            return False
+
+        blocked_prefixes = [
+            "aim:",
+            "aims:",
+            "objective:",
+            "objectives:",
+            "background:",
+            "purpose:",
+            "purposes:",
+            "methods:",
+            "method:",
+            "materials and methods:",
+        ]
+
+        if any(lower.startswith(prefix) for prefix in blocked_prefixes):
+            return True
+
+        blocked_phrases = [
+            "this study aimed to",
+            "this study aims to",
+            "this study was designed to",
+            "this review aims to",
+            "to assess the efficacy",
+            "to assess the effectiveness",
+            "to evaluate the efficacy",
+            "to evaluate the safety",
+            "to develop and characterize",
+            "to develop a",
+            "patients were divided into",
+            "were randomized to",
+            "in a further approach",
+            "we developed",
+        ]
+
+        return any(phrase in lower for phrase in blocked_phrases)
+
+    def _has_positive_signal(self, text: str) -> bool:
+        lower = text.lower()
+
+        positive_signals = [
+            "improved",
+            "improves",
+            "improvement",
+            "reduced",
+            "reduces",
+            "reduction",
+            "increase",
+            "increased",
+            "increases",
+            "enhanced",
+            "enhances",
+            "effective",
+            "efficacy",
+            "beneficial",
+            "ameliorated",
+            "alleviated",
+            "prevented",
+            "prevents",
+            "significantly",
+            "associated with",
+            "attenuated",
+            "restored",
+            "promoted",
+            "demonstrated",
+            "showed",
+            "shown",
+            "showing",
+            "resulted in",
+            "led to",
+            "improvement in",
+            "superior improvements",
+            "confer superior improvements",
+            "relieves",
+            "mitigate",
+            "mitigates",
+            "stimulates",
+            "healing",
+            "recovery",
+            "well-tolerated",
+            "well tolerated",
+            "tolerability",
+            "promising",
+            "therapeutic option",
+            "offer greater protection",
+            "protective",
+            "show promise",
+            "appears to be",
+            "appear to be",
+            "no remarkable side effects",
+            "no significant differences in safety outcomes",
+            "impressive modalities",
+            "lowered",
+            "reduced melasma severity",
+            "improve hyperpigmentation",
+            "improvement in melasma scores",
+        ]
+
+        if self._is_results_or_conclusion_sentence(text):
+            return True
+
+        return any(term in lower for term in positive_signals)
+
+    def is_claim_like_sentence(self, text: str) -> bool:
+        text = text.strip()
+        if not text:
+            return False
+
+        if self._is_blocked_non_cosmetic_domain(text):
+            return False
+
+        if self._is_study_design_sentence(text):
+            return False
+
+        has_positive_signal = self._has_positive_signal(text)
+        has_skin_context = self._has_skin_context(text)
+
+        return has_positive_signal and has_skin_context
+
+    def _is_niacinamide_context_valid(self, text: str) -> bool:
+        lower = text.lower()
+
+        bad_terms = [
+            "nad",
+            "nad+",
+            "nadh",
+            "nadp",
+            "nadph",
+            "nicotinamide adenine dinucleotide",
+            "nicotinamide riboside",
+            "nicotinamide mononucleotide",
+            "nmn",
+            "nr",
+            "coenzyme",
+            "mitochondria",
+            "mitochondrial",
+            "metabolism",
+            "metabolic",
+            "bioenergetic",
+        ]
+
+        if any(term in lower for term in bad_terms):
+            return False
+
+        # nicotinamide/niacinamide는 피부/광손상/색소/장벽 문맥이면 허용
+        required_context_terms = [
+            "skin",
+            "topical",
+            "uv",
+            "uvb",
+            "photoaging",
+            "photodamaged",
+            "photo-damaged",
+            "hyperpigmentation",
+            "pigmentation",
+            "melasma",
+            "barrier",
+            "immunosuppression",
+            "erythema",
+            "acne",
+            "facial",
+        ]
+
+        has_required_context = any(term in lower for term in required_context_terms)
+        return has_required_context
+
+    def _passes_special_context_rule(self, canonical_name: str, text: str) -> bool:
+        canonical_lower = canonical_name.lower()
+
+        if canonical_lower == "niacinamide":
+            return self._is_niacinamide_context_valid(text)
+
+        return True
+
     def extract_ingredient_names(self, text: str) -> List[str]:
         text = text.strip()
         if not text:
+            return []
+
+        if not self.is_claim_like_sentence(text):
             return []
 
         found: List[str] = []
@@ -90,6 +364,9 @@ class ClaimExtractor:
             if exclude_matched:
                 continue
 
+            if not self._passes_special_context_rule(canonical_name, text):
+                continue
+
             found.append(canonical_name)
 
         return found
@@ -99,35 +376,19 @@ class ClaimExtractor:
         LLM이 반환한 ingredient를 canonical ingredient로 정규화한다.
         우선순위:
         1) canonical exact match
-        2) alias exact-ish match
-        3) canonical/alias substring containment (보수적으로)
+        2) alias exact match
         """
         raw = ingredient_name.strip()
         if not raw:
             return None
 
-        # 1) canonical exact match
         for canonical_name in self.allowed_canonical_ingredients:
             if raw.lower() == canonical_name.lower():
                 return canonical_name
 
-        # 2) alias exact-ish match
         for canonical_name, rule in self.ingredient_rules.items():
             for alias in rule["aliases"]:
                 if raw.lower() == alias.lower():
-                    return canonical_name
-
-        # 3) substring containment fallback
-        # 예: "Ceramide NP C15" -> "Ceramide"
-        # 예: "Dexpanthenol" -> "Panthenol" (alias로 잡히면 2단계에서 먼저 해결됨)
-        for canonical_name, rule in self.ingredient_rules.items():
-            candidates = [canonical_name] + rule["aliases"]
-
-            for candidate in candidates:
-                candidate_lower = candidate.lower()
-                raw_lower = raw.lower()
-
-                if candidate_lower and candidate_lower in raw_lower:
                     return canonical_name
 
         return None
@@ -152,12 +413,12 @@ class ClaimExtractor:
             "KERATOLYTIC": ["keratolytic", "exfoliation", "peeling"],
             "COMEDOLYTIC": ["comedone", "comedones", "blackhead", "whitehead"],
             "ANTIMICROBIAL": ["antimicrobial", "antibacterial", "microbial"],
-            "DEPIGMENTING": ["depigment", "melasma", "hyperpigmentation", "pigmentation"],
+            "DEPIGMENTING": ["depigment", "melasma", "hyperpigmentation", "pigmentation", "pih"],
             "BRIGHTENING": ["brightening", "skin tone", "dyschromia"],
             "ANTIOXIDANT": ["antioxidant", "oxidative stress"],
             "WOUND_HEALING": ["wound healing", "healing", "repair"],
-            "ANTI_AGING": ["anti-aging", "wrinkle", "elasticity", "aging"],
-            "PHOTOPROTECTIVE": ["photoprotective", "uv", "photoaging"],
+            "ANTI_AGING": ["anti-aging", "wrinkle", "elasticity", "aging", "photoaging"],
+            "PHOTOPROTECTIVE": ["photoprotective", "uv", "uvb", "photoaging", "photodamaged"],
         }
 
         for row in effect_rows:
@@ -185,9 +446,16 @@ class ClaimExtractor:
             "DRY_SKIN": ["dry skin", "xerosis"],
             "DEHYDRATED_SKIN": ["dehydrated skin", "dehydration"],
             "BARRIER_DAMAGE": ["barrier", "skin barrier", "tewl"],
-            "HYPERPIGMENTATION": ["hyperpigmentation", "melasma", "pigmentation"],
+            "HYPERPIGMENTATION": [
+                "hyperpigmentation",
+                "melasma",
+                "pigmentation",
+                "pih",
+                "infraorbital hyperpigmentation",
+                "laser-induced pih",
+            ],
             "DULLNESS": ["dullness", "uneven skin tone"],
-            "AGING_SIGNS": ["aging", "wrinkle", "elasticity"],
+            "AGING_SIGNS": ["aging", "wrinkle", "elasticity", "photoaging", "photodamaged"],
             "ATOPIC_PRONE": ["atopic", "atopic dermatitis"],
             "ROSACEA_PRONE": ["rosacea"],
             "POST_ACNE_MARKS": ["post-acne", "post inflammatory hyperpigmentation", "pih"],
