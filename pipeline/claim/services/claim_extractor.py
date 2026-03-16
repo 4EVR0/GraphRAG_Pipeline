@@ -1,14 +1,236 @@
 import csv
 import re
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from pipeline.common.config.settings import settings
+
+
+GENERIC_OR_NON_COSMETIC_TARGETS = {
+    "benefit",
+    "benefits",
+    "effect",
+    "effects",
+    "effectiveness",
+    "outcome",
+    "outcomes",
+    "properties",
+    "treatment",
+    "treatments",
+    "topical treatment",
+    "topical treatments",
+    "effectiveness of topical treatments",
+    "patient outcomes",
+    "blood loss",
+    "perioperative bleeding",
+    "perioperative bleeding treatment",
+    "fibrinolysis",
+    "systemic txa levels",
+    "seroma risk",
+    "reparative effects",
+    "anti-inflammatory effects",
+    "protective metabolites",
+    "therapeutic option",
+    "clinical improvement",
+    "unknown",
+    "ven",
+    "surgical contexts",
+}
+
+NON_COSMETIC_TARGET_PATTERNS = [
+    "perioperative",
+    "blood loss",
+    "fibrinolysis",
+    "systemic txa",
+    "seroma risk",
+    "cardiac surgery",
+    "surgery",
+    "surgical",
+    "ostomy",
+    "ven",
+    "clinical improvement",
+    "topical treatment",
+    "topical treatments",
+    "therapeutic option",
+    "protective metabolite",
+    "protective metabolites",
+]
+
+CANONICAL_INGREDIENT_MAP = {
+    "niacinamide": "Niacinamide",
+    "nicotinamide": "Niacinamide",
+    "nia": "Niacinamide",
+    "panthenol": "Panthenol",
+    "d-panthenol": "Panthenol",
+    "dexpanthenol": "Panthenol",
+    "ceramide": "Ceramide",
+    "ceramides": "Ceramide",
+    "ceramide np": "Ceramide",
+    "ceramide ap": "Ceramide",
+    "ceramide eop": "Ceramide",
+    "ceramide ns": "Ceramide",
+    "ceramide ng": "Ceramide",
+    "ceramide as": "Ceramide",
+    "ceramide eos": "Ceramide",
+    "ceramide np c15": "Ceramide",
+    "tranexamic acid": "Tranexamic acid",
+    "txa": "Tranexamic acid",
+    "salicylic acid": "Salicylic acid",
+}
+
+RESULT_PREFIX_RE = re.compile(r"^(results?|conclusions?):\s*", re.IGNORECASE)
+
+NON_TARGET_LEADING_SUBJECT_PATTERNS = [
+    r"berberine\b",
+    r"β-nicotinamide mononucleotide\b",
+    r"nicotinamide mononucleotide\b",
+    r"nicotinamide riboside\b",
+    r"mdba\b",
+    r"pt-liposomes?\b",
+    r"basic emollient formulations?\b",
+    r"vehicle\b",
+    r"formulation\b",
+    r"formulations\b",
+    r"liposomes?\b",
+    r"bacterial-derived ceramides?\b",
+    r"cer\d+\b",
+]
+
+ALLOWED_PREFIX_PATTERNS = [
+    r"topical(?:ly)?\s+",
+    r"oral\s+",
+    r"application of\s+",
+    r"treatment with\s+",
+    r"use of\s+",
+    r"the use of\s+",
+    r"using\s+",
+    r"with\s+",
+    r"post-treatment with\s+",
+]
+
+SKIN_CONTEXT_TERMS = [
+    "skin",
+    "topical",
+    "cosmetic",
+    "cosmeceutical",
+    "dermatology",
+    "dermatologic",
+    "epidermis",
+    "epidermal",
+    "cutaneous",
+    "facial",
+    "barrier",
+    "skin barrier",
+    "barrier function",
+    "hydration",
+    "hydrate",
+    "hydrating",
+    "moisturizing",
+    "moisturization",
+    "transepidermal water loss",
+    "tewl",
+    "pigmentation",
+    "hyperpigmentation",
+    "melasma",
+    "pih",
+    "photoaging",
+    "photodamaged",
+    "photo-damaged",
+    "uv",
+    "uvb",
+    "erythema",
+    "redness",
+    "acne",
+    "wrinkle",
+    "wrinkles",
+    "elasticity",
+    "irritation",
+    "sensitive skin",
+    "dry skin",
+    "brightening",
+    "depigmenting",
+    "wound healing",
+    "repair",
+    "anti-aging",
+    "laser-induced pih",
+    "infraorbital hyperpigmentation",
+    "immunosuppression",
+    "keratinocyte",
+    "epidermal recovery",
+]
+
+POSITIVE_SIGNALS = [
+    "improved",
+    "improves",
+    "improvement",
+    "reduced",
+    "reduces",
+    "reduction",
+    "increase",
+    "increased",
+    "increases",
+    "enhanced",
+    "enhances",
+    "effective",
+    "efficacy",
+    "beneficial",
+    "ameliorated",
+    "alleviated",
+    "prevented",
+    "prevents",
+    "significantly",
+    "associated with",
+    "attenuated",
+    "restored",
+    "promoted",
+    "demonstrated",
+    "showed",
+    "shown",
+    "showing",
+    "resulted in",
+    "led to",
+    "improvement in",
+    "superior improvements",
+    "confer superior improvements",
+    "relieves",
+    "mitigate",
+    "mitigates",
+    "stimulates",
+    "healing",
+    "recovery",
+    "well-tolerated",
+    "well tolerated",
+    "tolerability",
+    "promising",
+    "therapeutic option",
+    "offer greater protection",
+    "protective",
+    "show promise",
+    "appears to be",
+    "appear to be",
+    "no remarkable side effects",
+    "no significant differences in safety outcomes",
+    "impressive modalities",
+    "lowered",
+    "reduced melasma severity",
+    "improve hyperpigmentation",
+    "improvement in melasma scores",
+    "photoprotective",
+    "antioxidative",
+    "normalized",
+    "normalizing",
+    "accelerated",
+    "accelerates",
+    "supports",
+    "supported",
+]
 
 
 class ClaimExtractor:
     def __init__(self) -> None:
         self.ingredient_rules = self._load_ingredient_rules()
         self.allowed_canonical_ingredients = set(self.ingredient_rules.keys())
+        self.alias_to_canonical = self._build_alias_to_canonical_map()
+        self.sorted_aliases = sorted(self.alias_to_canonical.keys(), key=len, reverse=True)
 
     def _split_pipe_field(self, value: str) -> List[str]:
         if not value:
@@ -49,9 +271,52 @@ class ClaimExtractor:
                 if query_name:
                     aliases.append(query_name)
                 aliases.extend(self._split_pipe_field(alias_list))
+
+                if canonical_name == "Niacinamide":
+                    aliases.extend(["nicotinamide", "nia"])
+                elif canonical_name == "Panthenol":
+                    aliases.extend(["d-panthenol", "dexpanthenol"])
+                elif canonical_name == "Ceramide":
+                    aliases.extend([
+                        "ceramides",
+                        "ceramide np",
+                        "ceramide ap",
+                        "ceramide eop",
+                        "ceramide ns",
+                        "ceramide ng",
+                        "ceramide as",
+                        "ceramide eos",
+                        "ceramide np c15",
+                    ])
+                elif canonical_name == "Tranexamic acid":
+                    aliases.extend(["txa"])
+
                 aliases = self._normalize_unique(aliases)
 
                 excludes = self._split_pipe_field(exclude_if_contains)
+
+                if canonical_name == "Niacinamide":
+                    excludes.extend([
+                        "nicotinamide mononucleotide",
+                        "β-nicotinamide mononucleotide",
+                        "nicotinamide riboside",
+                        "(nmn)",
+                        "(nr)",
+                        " nmn ",
+                        " nr ",
+                        "nad",
+                        "nad+",
+                        "nadh",
+                        "nadp",
+                        "nadph",
+                    ])
+                elif canonical_name == "Ceramide":
+                    excludes.extend([
+                        "cer2",
+                        "cer14",
+                        "bacterial-derived ceramides",
+                    ])
+
                 excludes = self._normalize_unique(excludes)
 
                 rules[canonical_name] = {
@@ -61,70 +326,38 @@ class ClaimExtractor:
 
         return rules
 
-    def _contains_term(self, text: str, term: str) -> bool:
-        pattern = r"\b" + re.escape(term.lower()) + r"\b"
-        return re.search(pattern, text.lower()) is not None
+    def _build_alias_to_canonical_map(self) -> Dict[str, str]:
+        alias_map: Dict[str, str] = {}
+
+        for canonical_name, rule in self.ingredient_rules.items():
+            alias_map[canonical_name.lower()] = canonical_name
+            for alias in rule["aliases"]:
+                alias_map[alias.lower()] = canonical_name
+
+        for alias, canonical in CANONICAL_INGREDIENT_MAP.items():
+            alias_map[alias.lower()] = canonical
+
+        return alias_map
+
+    def _normalize_sentence_for_subject_check(self, text: str) -> str:
+        text = text.strip()
+        text = RESULT_PREFIX_RE.sub("", text)
+        return text.strip()
 
     def _contains_exclude_pattern(self, text: str, pattern: str) -> bool:
-        return pattern.lower() in text.lower()
+        lower = text.lower()
+        pattern_lower = pattern.lower()
+
+        if pattern_lower in {"nad", "nad+", "nadh", "nadp", "nadph", "nmn", "nr"}:
+            return re.search(r"\b" + re.escape(pattern_lower) + r"\b", lower) is not None
+
+        return pattern_lower in lower
 
     def _has_skin_context(self, text: str) -> bool:
         lower = text.lower()
-
-        skin_terms = [
-            "skin",
-            "topical",
-            "cosmetic",
-            "cosmeceutical",
-            "dermatology",
-            "dermatologic",
-            "epidermis",
-            "epidermal",
-            "cutaneous",
-            "facial",
-            "barrier",
-            "skin barrier",
-            "hydration",
-            "hydrate",
-            "hydrating",
-            "moisturizing",
-            "moisturization",
-            "transepidermal water loss",
-            "tewl",
-            "pigmentation",
-            "hyperpigmentation",
-            "melasma",
-            "pih",
-            "photoaging",
-            "photodamaged",
-            "photo-damaged",
-            "uv",
-            "uvb",
-            "erythema",
-            "redness",
-            "acne",
-            "wrinkle",
-            "wrinkles",
-            "elasticity",
-            "irritation",
-            "sensitive skin",
-            "dry skin",
-            "brightening",
-            "depigmenting",
-            "wound healing",
-            "repair",
-            "anti-aging",
-            "laser-induced pih",
-            "infraorbital hyperpigmentation",
-            "immunosuppression",
-        ]
-        return any(term in lower for term in skin_terms)
+        return any(term in lower for term in SKIN_CONTEXT_TERMS)
 
     def _is_blocked_non_cosmetic_domain(self, text: str) -> bool:
-        """
-        피부/화장품 추천 목적과 명확히 동떨어진 문맥만 차단한다.
-        너무 공격적으로 막으면 좋은 피부 논문도 날아가므로 최소 차단만 적용.
-        """
         lower = text.lower()
 
         blocked_terms = [
@@ -143,6 +376,8 @@ class ClaimExtractor:
             "postoperative",
             "surgical drain",
             "breast reconstruction",
+            "traumatic hemorrhage",
+            "hemorrhage",
         ]
 
         return any(term in lower for term in blocked_terms)
@@ -158,10 +393,6 @@ class ClaimExtractor:
         )
 
     def _is_study_design_sentence(self, text: str) -> bool:
-        """
-        목표/배경/방법 문장만 차단한다.
-        RESULTS/CONCLUSION 문장은 차단하지 않는다.
-        """
         lower = text.lower().strip()
 
         if self._is_results_or_conclusion_sentence(text):
@@ -178,6 +409,7 @@ class ClaimExtractor:
             "methods:",
             "method:",
             "materials and methods:",
+            "patients and methods:",
         ]
 
         if any(lower.startswith(prefix) for prefix in blocked_prefixes):
@@ -205,111 +437,88 @@ class ClaimExtractor:
     def _has_positive_signal(self, text: str) -> bool:
         lower = text.lower()
 
-        positive_signals = [
-            "improved",
-            "improves",
-            "improvement",
-            "reduced",
-            "reduces",
-            "reduction",
-            "increase",
-            "increased",
-            "increases",
-            "enhanced",
-            "enhances",
-            "effective",
-            "efficacy",
-            "beneficial",
-            "ameliorated",
-            "alleviated",
-            "prevented",
-            "prevents",
-            "significantly",
-            "associated with",
-            "attenuated",
-            "restored",
-            "promoted",
-            "demonstrated",
-            "showed",
-            "shown",
-            "showing",
-            "resulted in",
-            "led to",
-            "improvement in",
-            "superior improvements",
-            "confer superior improvements",
-            "relieves",
-            "mitigate",
-            "mitigates",
-            "stimulates",
-            "healing",
-            "recovery",
-            "well-tolerated",
-            "well tolerated",
-            "tolerability",
-            "promising",
-            "therapeutic option",
-            "offer greater protection",
-            "protective",
-            "show promise",
-            "appears to be",
-            "appear to be",
-            "no remarkable side effects",
-            "no significant differences in safety outcomes",
-            "impressive modalities",
-            "lowered",
-            "reduced melasma severity",
-            "improve hyperpigmentation",
-            "improvement in melasma scores",
-        ]
-
         if self._is_results_or_conclusion_sentence(text):
             return True
 
-        return any(term in lower for term in positive_signals)
+        return any(term in lower for term in POSITIVE_SIGNALS)
 
-    def is_claim_like_sentence(self, text: str) -> bool:
-        text = text.strip()
-        if not text:
+    def _starts_with_non_target_subject(self, text: str) -> bool:
+        normalized = self._normalize_sentence_for_subject_check(text).lower()
+        return any(re.match(pattern, normalized) for pattern in NON_TARGET_LEADING_SUBJECT_PATTERNS)
+
+    def _extract_front_subject_alias(self, text: str) -> Optional[Tuple[str, str]]:
+        normalized = self._normalize_sentence_for_subject_check(text)
+        lower = normalized.lower()
+
+        for alias in self.sorted_aliases:
+            direct_pattern = r"^" + re.escape(alias) + r"\b"
+            if re.match(direct_pattern, lower):
+                return alias, self.alias_to_canonical[alias]
+
+            for prefix in ALLOWED_PREFIX_PATTERNS:
+                prefixed_pattern = r"^" + prefix + re.escape(alias) + r"\b"
+                if re.match(prefixed_pattern, lower):
+                    return alias, self.alias_to_canonical[alias]
+
+        return None
+
+    def _extract_any_alias(self, text: str) -> Optional[Tuple[str, str]]:
+        lower = text.lower()
+
+        for alias in self.sorted_aliases:
+            pattern = r"\b" + re.escape(alias) + r"\b"
+            if re.search(pattern, lower):
+                return alias, self.alias_to_canonical[alias]
+
+        return None
+
+    def _has_multi_ingredient_enumeration(self, text: str) -> bool:
+        lower = text.lower()
+
+        trigger_phrases = [
+            "containing",
+            "contains",
+            "with",
+            "along with",
+            "combined with",
+            "plus",
+            "such as",
+        ]
+
+        if not any(phrase in lower for phrase in trigger_phrases):
             return False
 
-        if self._is_blocked_non_cosmetic_domain(text):
-            return False
+        matched_aliases = []
+        for alias in self.sorted_aliases:
+            if re.search(r"\b" + re.escape(alias) + r"\b", lower):
+                matched_aliases.append(alias)
 
-        if self._is_study_design_sentence(text):
-            return False
-
-        has_positive_signal = self._has_positive_signal(text)
-        has_skin_context = self._has_skin_context(text)
-
-        return has_positive_signal and has_skin_context
+        canonicals = {self.alias_to_canonical[a] for a in matched_aliases}
+        return len(canonicals) >= 2
 
     def _is_niacinamide_context_valid(self, text: str) -> bool:
         lower = text.lower()
 
-        bad_terms = [
-            "nad",
-            "nad+",
-            "nadh",
-            "nadp",
-            "nadph",
-            "nicotinamide adenine dinucleotide",
+        if any(
+            re.search(r"\b" + re.escape(term) + r"\b", lower)
+            for term in ["nmn", "nr", "nad", "nad+", "nadh", "nadp", "nadph"]
+        ):
+            return False
+
+        if any(term in lower for term in [
             "nicotinamide riboside",
             "nicotinamide mononucleotide",
-            "nmn",
-            "nr",
-            "coenzyme",
+            "β-nicotinamide mononucleotide",
+            "nicotinamide adenine dinucleotide",
             "mitochondria",
             "mitochondrial",
             "metabolism",
             "metabolic",
             "bioenergetic",
-        ]
-
-        if any(term in lower for term in bad_terms):
+            "coenzyme",
+        ]):
             return False
 
-        # nicotinamide/niacinamide는 피부/광손상/색소/장벽 문맥이면 허용
         required_context_terms = [
             "skin",
             "topical",
@@ -328,16 +537,31 @@ class ClaimExtractor:
             "facial",
         ]
 
-        has_required_context = any(term in lower for term in required_context_terms)
-        return has_required_context
+        return any(term in lower for term in required_context_terms)
 
     def _passes_special_context_rule(self, canonical_name: str, text: str) -> bool:
-        canonical_lower = canonical_name.lower()
-
-        if canonical_lower == "niacinamide":
+        if canonical_name.lower() == "niacinamide":
             return self._is_niacinamide_context_valid(text)
-
         return True
+
+    def is_claim_like_sentence(self, text: str) -> bool:
+        text = text.strip()
+        if not text:
+            return False
+
+        if self._is_blocked_non_cosmetic_domain(text):
+            return False
+
+        if self._is_study_design_sentence(text):
+            return False
+
+        if self._starts_with_non_target_subject(text):
+            return False
+
+        has_positive_signal = self._has_positive_signal(text)
+        has_skin_context = self._has_skin_context(text)
+
+        return has_positive_signal and has_skin_context
 
     def extract_ingredient_names(self, text: str) -> List[str]:
         text = text.strip()
@@ -347,57 +571,145 @@ class ClaimExtractor:
         if not self.is_claim_like_sentence(text):
             return []
 
-        found: List[str] = []
+        if self._has_multi_ingredient_enumeration(text):
+            return []
 
-        for canonical_name, rule in self.ingredient_rules.items():
-            aliases = rule["aliases"]
-            excludes = rule["excludes"]
+        matched = self._extract_front_subject_alias(text)
 
-            alias_matched = any(self._contains_term(text, alias) for alias in aliases)
-            if not alias_matched:
-                continue
+        if not matched:
+            matched = self._extract_any_alias(text)
 
-            exclude_matched = any(
-                self._contains_exclude_pattern(text, exclude_pattern)
-                for exclude_pattern in excludes
-            )
-            if exclude_matched:
-                continue
+        if not matched:
+            return []
 
-            if not self._passes_special_context_rule(canonical_name, text):
-                continue
+        _, canonical_name = matched
+        rule = self.ingredient_rules.get(canonical_name, {})
+        excludes = rule.get("excludes", [])
 
-            found.append(canonical_name)
+        if any(self._contains_exclude_pattern(text, exclude_pattern) for exclude_pattern in excludes):
+            return []
 
-        return found
+        if not self._passes_special_context_rule(canonical_name, text):
+            return []
+
+        return [canonical_name]
 
     def normalize_ingredient_name(self, ingredient_name: str) -> Optional[str]:
-        """
-        LLM이 반환한 ingredient를 canonical ingredient로 정규화한다.
-        우선순위:
-        1) canonical exact match
-        2) alias exact match
-        """
         raw = ingredient_name.strip()
         if not raw:
             return None
 
-        for canonical_name in self.allowed_canonical_ingredients:
-            if raw.lower() == canonical_name.lower():
-                return canonical_name
+        lower_raw = raw.lower()
 
-        for canonical_name, rule in self.ingredient_rules.items():
-            for alias in rule["aliases"]:
-                if raw.lower() == alias.lower():
-                    return canonical_name
+        if lower_raw in self.alias_to_canonical:
+            return self.alias_to_canonical[lower_raw]
+
+        # ceramide subtype 일반화
+        ceramide_subtype_pattern = r"^ceramide(?:\s+[a-z0-9]+)+$"
+        if re.match(ceramide_subtype_pattern, lower_raw):
+            return "Ceramide"
+
+        for canonical_name in self.allowed_canonical_ingredients:
+            if lower_raw == canonical_name.lower():
+                return canonical_name
 
         return None
 
     def is_allowed_ingredient(self, ingredient_name: str) -> bool:
-        return ingredient_name.strip() in self.allowed_canonical_ingredients
+        return self.normalize_ingredient_name(ingredient_name) is not None
 
     def get_allowed_ingredient_names(self) -> List[str]:
         return sorted(self.allowed_canonical_ingredients)
+
+    def _is_generic_or_non_cosmetic_target(self, target_text: str) -> bool:
+        lower = target_text.strip().lower()
+
+        if lower in GENERIC_OR_NON_COSMETIC_TARGETS:
+            return True
+
+        return any(pattern in lower for pattern in NON_COSMETIC_TARGET_PATTERNS)
+
+    def _sentence_mentions_ingredient(
+        self,
+        normalized_ingredient: str,
+        source_sentence: Optional[str] = None,
+        claim_text: Optional[str] = None,
+    ) -> bool:
+        sentence = (source_sentence or claim_text or "").strip()
+        if not sentence:
+            return True
+
+        if self._starts_with_non_target_subject(sentence):
+            return False
+
+        matched = self._extract_front_subject_alias(sentence)
+        if matched:
+            _, subject_canonical = matched
+            return subject_canonical == normalized_ingredient
+
+        matched = self._extract_any_alias(sentence)
+        if not matched:
+            return False
+
+        _, canonical = matched
+        return canonical == normalized_ingredient
+
+    def validate_claim(
+        self,
+        raw_claim: Dict,
+        source_sentence: Optional[str] = None,
+    ) -> Optional[Dict]:
+        ingredient = raw_claim.get("ingredient", "")
+        target = raw_claim.get("target", "")
+        relation = raw_claim.get("relation", "")
+        claim_type = raw_claim.get("claim_type", "")
+        evidence_direction = raw_claim.get("evidence_direction", "")
+        confidence = raw_claim.get("confidence", 0.0)
+
+        normalized_ingredient = self.normalize_ingredient_name(ingredient)
+        if not normalized_ingredient:
+            return None
+
+        if not self._sentence_mentions_ingredient(
+            normalized_ingredient=normalized_ingredient,
+            source_sentence=source_sentence,
+            claim_text=raw_claim.get("claim_text"),
+        ):
+            return None
+
+        if not target or not isinstance(target, str):
+            return None
+
+        cleaned_target = target.strip()
+        if not cleaned_target:
+            return None
+
+        if self._is_generic_or_non_cosmetic_target(cleaned_target):
+            return None
+
+        if not relation or not isinstance(relation, str):
+            return None
+
+        if not claim_type or not isinstance(claim_type, str):
+            return None
+
+        if not evidence_direction or not isinstance(evidence_direction, str):
+            return None
+
+        try:
+            confidence = float(confidence)
+        except (TypeError, ValueError):
+            confidence = 0.0
+
+        return {
+            **raw_claim,
+            "ingredient": normalized_ingredient,
+            "target": cleaned_target,
+            "relation": relation.strip(),
+            "claim_type": claim_type.strip(),
+            "evidence_direction": evidence_direction.strip(),
+            "confidence": confidence,
+        }
 
     def extract_effect_ids(self, text: str, effect_rows: List[Dict]) -> List[int]:
         lower = text.lower()
@@ -406,7 +718,7 @@ class ClaimExtractor:
         synonym_map = {
             "ANTI_INFLAMMATORY": ["anti-inflammatory", "inflammation", "inflammatory"],
             "SOOTHING": ["soothing", "calming", "redness", "irritation"],
-            "BARRIER_REPAIR": ["barrier", "barrier repair", "skin barrier"],
+            "BARRIER_REPAIR": ["barrier", "barrier repair", "skin barrier", "barrier function"],
             "HYDRATING": ["hydration", "hydrating", "hydrate", "moisturizing"],
             "MOISTURE_RETENTION": ["transepidermal water loss", "tewl", "moisture retention"],
             "SEBUM_REGULATION": ["sebum", "oil control", "oily skin"],
@@ -415,10 +727,10 @@ class ClaimExtractor:
             "ANTIMICROBIAL": ["antimicrobial", "antibacterial", "microbial"],
             "DEPIGMENTING": ["depigment", "melasma", "hyperpigmentation", "pigmentation", "pih"],
             "BRIGHTENING": ["brightening", "skin tone", "dyschromia"],
-            "ANTIOXIDANT": ["antioxidant", "oxidative stress"],
+            "ANTIOXIDANT": ["antioxidant", "antioxidative", "oxidative stress"],
             "WOUND_HEALING": ["wound healing", "healing", "repair"],
             "ANTI_AGING": ["anti-aging", "wrinkle", "elasticity", "aging", "photoaging"],
-            "PHOTOPROTECTIVE": ["photoprotective", "uv", "uvb", "photoaging", "photodamaged"],
+            "PHOTOPROTECTIVE": ["photoprotective", "uv", "uvb", "photoaging", "photodamaged", "immunosuppression"],
         }
 
         for row in effect_rows:
@@ -445,7 +757,7 @@ class ClaimExtractor:
             "IRRITATED_SKIN": ["irritation", "stinging", "burning"],
             "DRY_SKIN": ["dry skin", "xerosis"],
             "DEHYDRATED_SKIN": ["dehydrated skin", "dehydration"],
-            "BARRIER_DAMAGE": ["barrier", "skin barrier", "tewl"],
+            "BARRIER_DAMAGE": ["barrier", "skin barrier", "tewl", "barrier function"],
             "HYPERPIGMENTATION": [
                 "hyperpigmentation",
                 "melasma",

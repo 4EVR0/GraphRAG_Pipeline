@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+import inspect
+
 from pipeline.common.config.settings import settings
 from pipeline.common.repositories.paper_repository import get_connection
 from pipeline.common.repositories.claim_repository import (
@@ -16,7 +20,6 @@ from pipeline.claim.services.claim_filter import (
     is_claim_candidate_sentence,
     is_claim_worthy_section,
 )
-from pipeline.claim.services.claim_validator import normalize_and_validate_claim
 from pipeline.claim.services.llm_claim_extractor import llm_extractor
 from pipeline.claim.services.sentence_splitter import split_sentences
 
@@ -30,21 +33,97 @@ def validate_environment() -> None:
         raise RuntimeError("DATABASE_URL is not set. Check your .env file.")
 
 
+def _get_sentence_level_ingredient_candidates(sentence: str) -> list[str]:
+    sentence = sentence.strip()
+    if not sentence:
+        return []
+    return extractor.extract_ingredient_names(sentence)
+
+
+def _get_chunk_level_ingredient_candidates(sentences: list[str]) -> list[str]:
+    candidates: list[str] = []
+
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+
+        sentence_candidates = _get_sentence_level_ingredient_candidates(sentence)
+        if sentence_candidates:
+            candidates.extend(sentence_candidates)
+
+    # 순서 유지 + 중복 제거
+    return list(dict.fromkeys(candidates))
+
+
+def _chunk_has_candidate_sentence(chunk: dict) -> bool:
+    chunk_text = chunk.get("chunk_text", "")
+    if not chunk_text:
+        return False
+
+    section_type = chunk.get("section_type")
+    if not is_claim_worthy_section(section_type):
+        return False
+
+    sentences = split_sentences(chunk_text)
+    if not sentences:
+        return False
+
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+
+        if is_blocked_sentence(sentence):
+            continue
+
+        if not is_claim_candidate_sentence(sentence):
+            continue
+
+        sentence_ingredient_candidates = _get_sentence_level_ingredient_candidates(sentence)
+        if sentence_ingredient_candidates:
+            return True
+
+    return False
+
+
 def select_candidate_rich_chunks(conn) -> list[dict]:
     """
-    테스트용:
-    전체 unprocessed chunk 중에서
-    ingredient candidate가 하나라도 잡히는 chunk만 추려서 앞 50개 사용.
+    전체 unprocessed chunk 중에서,
+    문장 단위로 봤을 때 claim candidate + ingredient candidate가
+    하나라도 있는 chunk만 추려서 앞 50개 사용.
     """
     all_chunks = fetch_unprocessed_chunks(conn)
 
     candidate_rich_chunks = [
         chunk
         for chunk in all_chunks
-        if extractor.extract_ingredient_names(chunk["chunk_text"])
+        if _chunk_has_candidate_sentence(chunk)
     ]
 
     return candidate_rich_chunks[:TEST_CHUNK_LIMIT]
+
+
+def _validate_claim_compat(raw_claim: dict, sentence: str) -> dict | None:
+    """
+    claim_extractor.py가
+    - 신버전: validate_claim(raw_claim, source_sentence=...)
+    - 구버전: validate_claim(raw_claim)
+    둘 중 어느 형태여도 동작하게 맞춘다.
+    """
+    validate_fn = extractor.validate_claim
+
+    try:
+        sig = inspect.signature(validate_fn)
+        if "source_sentence" in sig.parameters:
+            return validate_fn(raw_claim, source_sentence=sentence)
+        return validate_fn(raw_claim)
+    except TypeError:
+        # 예외적으로 signature 확인이 꼬이더라도 fallback
+        try:
+            return validate_fn(raw_claim, source_sentence=sentence)
+        except TypeError:
+            return validate_fn(raw_claim)
 
 
 def main() -> None:
@@ -77,7 +156,7 @@ def main() -> None:
 
         for chunk in chunks:
             try:
-                chunk_text = chunk["chunk_text"]
+                chunk_text = chunk.get("chunk_text", "")
                 sentences = split_sentences(chunk_text)
 
                 if not sentences:
@@ -88,7 +167,7 @@ def main() -> None:
                     blocked_sentence_count += len(sentences)
                     continue
 
-                chunk_ingredient_candidates = extractor.extract_ingredient_names(chunk_text)
+                chunk_ingredient_candidates = _get_chunk_level_ingredient_candidates(sentences)
 
                 if debug_chunk_printed < DEBUG_PRINT_LIMIT:
                     print(
@@ -125,7 +204,9 @@ def main() -> None:
 
                         continue
 
-                    sentence_ingredient_candidates = extractor.extract_ingredient_names(sentence)
+                    sentence_ingredient_candidates = _get_sentence_level_ingredient_candidates(sentence)
+
+                    # 우선 sentence 기준을 사용하되, 비어 있으면 같은 chunk 안의 다른 문장에서 모은 후보를 fallback
                     ingredient_candidates = (
                         sentence_ingredient_candidates or chunk_ingredient_candidates
                     )
@@ -165,10 +246,9 @@ def main() -> None:
                         continue
 
                     for raw_claim in raw_claims:
-                        validated_claim = normalize_and_validate_claim(
-                            claim=raw_claim,
+                        validated_claim = _validate_claim_compat(
+                            raw_claim=raw_claim,
                             sentence=sentence,
-                            allowed_ingredients=extractor.allowed_canonical_ingredients,
                         )
 
                         if validated_claim is None:
