@@ -20,13 +20,35 @@ HARD_NON_CLAIM_PATTERNS = [
     "measurement of",
     "analytical method",
     "hplc method",
+    "population perspective",
+    "cost-effective",
+    "cost effective",
+    "cost-saving",
+    "cost saving",
+]
+
+HARD_NON_TARGET_SUBJECT_PATTERNS = [
+    "berberine",
+    "nicotinamide mononucleotide",
+    "β-nicotinamide mononucleotide",
+    "nicotinamide riboside",
+    "mdba",
+    "pt-liposomes",
+    "pt-liposome",
+    "basic emollient formulations",
+    "basic emollient formulation",
+    "vehicle",
+    "formulation",
+    "formulations",
+    "liposomes",
+    "liposome",
 ]
 
 CLAIM_MARKERS = [
-
-    # 기존
     "improved",
     "improves",
+    "improvement",
+    "improvements",
     "reduced",
     "reduces",
     "decreased",
@@ -39,10 +61,13 @@ CLAIM_MARKERS = [
     "restores",
     "suppressed",
     "suppresses",
-
-    # 추가 (논문에서 매우 흔함)
-    "improvement",
-    "improvements",
+    "effective",
+    "efficacious",
+    "safe",
+    "well tolerated",
+    "well-tolerated",
+    "tolerated",
+    "tolerability",
     "demonstrated",
     "demonstrates",
     "showed",
@@ -55,26 +80,36 @@ CLAIM_MARKERS = [
     "associated with",
     "resulted in",
     "led to",
-
-    # 임상 표현
     "may reduce",
     "may improve",
     "may enhance",
     "may offer",
+    "may prevent",
     "offer greater protection",
-
-    # 피부 관련
     "prevent",
     "prevents",
     "protect",
     "protects",
-
-    # 화장품 claim
-    "hydration",
     "barrier function",
+    "skin barrier",
+    "hydration",
     "hyperpigmentation",
     "melasma",
     "photoaging",
+    "photoprotective",
+    "antioxidative",
+    "anti-acne",
+    "soothing",
+    "repairing",
+    "lowered",
+    "inhibiting",
+    "inhibited",
+    "stimulated",
+    "modulated",
+    "mitigate",
+    "mitigates",
+    "impressive modalities",
+    "confer superior improvements",
 ]
 
 NEGATION_MARKERS = [
@@ -86,7 +121,19 @@ NEGATION_MARKERS = [
     "no effect",
     "ineffective",
     "failed to show",
+    "showed no benefit",
+    "no benefit",
 ]
+
+
+def _normalize_prefix(sentence: str) -> str:
+    lower = sentence.lower().strip()
+
+    for prefix in ("results:", "result:", "conclusion:", "conclusions:"):
+        if lower.startswith(prefix):
+            return lower[len(prefix):].strip()
+
+    return lower
 
 
 def is_blocked_sentence(sentence: str) -> bool:
@@ -96,8 +143,16 @@ def is_blocked_sentence(sentence: str) -> bool:
 
 def is_claim_candidate_sentence(sentence: str) -> bool:
     lower = sentence.lower().strip()
+    normalized = _normalize_prefix(sentence)
 
     if any(pattern in lower for pattern in HARD_NON_CLAIM_PATTERNS):
+        return False
+
+    if any(normalized.startswith(pattern) for pattern in HARD_NON_TARGET_SUBJECT_PATTERNS):
+        return False
+
+    # CER2, CER14 같은 ceramide subclass는 현재 프로젝트 스코프에서는 제외
+    if normalized.startswith("cer") and len(normalized) >= 4 and normalized[3].isdigit():
         return False
 
     if lower.startswith("results:") or lower.startswith("result:"):
