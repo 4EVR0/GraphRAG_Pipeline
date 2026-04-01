@@ -9,7 +9,11 @@ from pipeline.common.repositories.paper_repository import (
 from pipeline.metadata.services.pubmed_client import PubMedClient
 from pipeline.metadata.services.pubmed_parser import parse_pubmed_xml
 from pipeline.metadata.services.query_builder import build_pubmed_query
+from pipeline.bronze.pubmed.run_bronze import main
 
+
+if __name__ == "__main__":
+    main()
 
 def validate_environment() -> None:
     if not settings.database_url:

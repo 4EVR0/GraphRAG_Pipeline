@@ -16,6 +16,9 @@ class Settings:
     Application configuration loaded from .env
     """
 
+    # Base
+    base_dir: Path = BASE_DIR
+
     # PubMed
     ncbi_base: str = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
     ncbi_email: str = os.getenv("NCBI_EMAIL", "")
@@ -34,6 +37,15 @@ class Settings:
 
     # Data
     target_csv_path: str = os.getenv("TARGET_CSV_PATH", "data/target_ingredients.csv")
+
+    # Bronze
+    bronze_root_dir: str = os.getenv("BRONZE_ROOT_DIR", "bronze")
+    bronze_domain_dir: str = os.getenv("BRONZE_DOMAIN_DIR", "pubmed")
+    enable_db_upsert: bool = os.getenv("ENABLE_DB_UPSERT", "true").lower() == "true"
+
+    @property
+    def bronze_pubmed_dir(self) -> Path:
+        return self.base_dir / self.bronze_root_dir / self.bronze_domain_dir
 
 
 settings = Settings()
