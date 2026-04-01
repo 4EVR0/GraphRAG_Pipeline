@@ -23,3 +23,5 @@ mvenv/
 # data outputs
 data/tmp/
 data/cache/
+bronze/
+*.csv
