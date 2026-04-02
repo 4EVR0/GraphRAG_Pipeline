@@ -43,9 +43,23 @@ class Settings:
     bronze_domain_dir: str = os.getenv("BRONZE_DOMAIN_DIR", "pubmed")
     enable_db_upsert: bool = os.getenv("ENABLE_DB_UPSERT", "true").lower() == "true"
 
+    # Silver
+    silver_root_dir: str = os.getenv("SILVER_ROOT_DIR", "silver")
+    silver_domain_dir: str = os.getenv("SILVER_DOMAIN_DIR", "paper")
+    enable_chunk_db_upsert: bool = os.getenv("ENABLE_CHUNK_DB_UPSERT", "false").lower() == "true"
+
+    # Chunk policy
+    chunk_max_chars: int = int(os.getenv("CHUNK_MAX_CHARS", "1000"))
+    chunk_overlap_chars: int = int(os.getenv("CHUNK_OVERLAP_CHARS", "150"))
+    chunk_version: str = os.getenv("CHUNK_VERSION", "abstract_char_window_v1")
+
     @property
     def bronze_pubmed_dir(self) -> Path:
         return self.base_dir / self.bronze_root_dir / self.bronze_domain_dir
+
+    @property
+    def silver_paper_dir(self) -> Path:
+        return self.base_dir / self.silver_root_dir / self.silver_domain_dir
 
 
 settings = Settings()

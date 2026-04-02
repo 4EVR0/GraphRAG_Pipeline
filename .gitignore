@@ -24,4 +24,5 @@ mvenv/
 data/tmp/
 data/cache/
 bronze/
+silver/
 *.csv
