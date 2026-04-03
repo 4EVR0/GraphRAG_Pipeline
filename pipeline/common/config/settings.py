@@ -48,6 +48,16 @@ class Settings:
     silver_domain_dir: str = os.getenv("SILVER_DOMAIN_DIR", "paper")
     enable_chunk_db_upsert: bool = os.getenv("ENABLE_CHUNK_DB_UPSERT", "false").lower() == "true"
 
+    # Gold
+    gold_root_dir: str = os.getenv("GOLD_ROOT_DIR", "gold")
+    gold_domain_dir: str = os.getenv("GOLD_DOMAIN_DIR", "claim")
+    enable_claim_db_upsert: bool = os.getenv("ENABLE_CLAIM_DB_UPSERT", "false").lower() == "true"
+    gold_test_chunk_limit: int = int(os.getenv("GOLD_TEST_CHUNK_LIMIT", "100000"))
+    gold_debug_print_limit: int = int(os.getenv("GOLD_DEBUG_PRINT_LIMIT", "10"))
+    extractor_version: str = os.getenv("EXTRACTOR_VERSION", "llm_claim_extractor_v1")
+    validator_version: str = os.getenv("VALIDATOR_VERSION", "claim_validator_v1")
+    mapping_version: str = os.getenv("MAPPING_VERSION", "taxonomy_mapping_v1")
+
     # Chunk policy
     chunk_max_chars: int = int(os.getenv("CHUNK_MAX_CHARS", "1000"))
     chunk_overlap_chars: int = int(os.getenv("CHUNK_OVERLAP_CHARS", "150"))
@@ -60,6 +70,10 @@ class Settings:
     @property
     def silver_paper_dir(self) -> Path:
         return self.base_dir / self.silver_root_dir / self.silver_domain_dir
+
+    @property
+    def gold_claim_dir(self) -> Path:
+        return self.base_dir / self.gold_root_dir / self.gold_domain_dir
 
 
 settings = Settings()
