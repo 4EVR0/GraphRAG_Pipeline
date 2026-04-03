@@ -24,4 +24,5 @@ mvenv/
 data/
 bronze/
 silver/
+gold/
 *.csv
