@@ -820,28 +820,13 @@ class ClaimExtractor:
 
     def _relation_allowed_for_target(self, relation: str, target: str) -> bool:
         lower_target = target.lower()
-
-        if relation == "stimulates":
-            return "cell" not in lower_target and "migration" not in lower_target
-
-        if relation == "increases":
-            allowed = ["hydration", "tolerance", "tolerability", "elasticity"]
-            return any(term in lower_target for term in allowed)
-
-        if relation in {"causes", "does_not_cause"}:
-            return any(term in lower_target for term in ["irritation", "erythema", "redness", "sensitivity"])
-
-        return True
-
-    def _relation_allowed_for_target(self, relation: str, target: str) -> bool:
-        lower_target = target.lower()
         relation = relation.strip().lower()
 
         if relation == "stimulates":
             return "cell" not in lower_target and "migration" not in lower_target
 
         if relation == "increases":
-            allowed = ["hydration", "tolerability", "elasticity"]
+            allowed = ["hydration", "tolerability", "elasticity", "tolerance"]
             return any(term in lower_target for term in allowed)
 
         if relation in {"causes", "does_not_cause"}:
@@ -851,7 +836,6 @@ class ClaimExtractor:
             )
 
         return True
-
 
     def validate_claim(
         self,

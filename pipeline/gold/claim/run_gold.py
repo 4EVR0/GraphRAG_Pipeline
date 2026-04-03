@@ -1,8 +1,7 @@
 import csv
-import hashlib
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from pipeline.claim.services.claim_extractor import extractor
 from pipeline.claim.services.claim_filter import (
@@ -20,6 +19,24 @@ from pipeline.common.io.gold_writer import (
     write_json,
 )
 from pipeline.common.models.gold_record import GoldClaimConcernMapRecord, GoldClaimEffectMapRecord, GoldClaimRecord
+from pipeline.gold.claim.evidence_scoring import (
+    aggregate_canonical_rows,
+    assert_canonical_score_order,
+    assert_tier_valid,
+    build_canonical_claim_key,
+    build_dedup_scope_key,
+    build_evidence_id,
+    build_policy_reasons,
+    compute_eligibility_tier,
+    compute_row_weight,
+    is_generalized_review_style,
+    is_graph_eligible_tier,
+    label_attribution_v2,
+    label_modality,
+    label_significance_v2,
+    label_strength_v2,
+    list_detected_ingredients_in_sentence,
+)
 
 try:
     from pipeline.common.repositories.paper_repository import get_connection
@@ -130,29 +147,14 @@ def _validate_claim_compat(raw_claim: dict, sentence: str) -> dict | None:
         return validate_fn(raw_claim)
 
 
-def _build_claim_key(
-    pmid: str,
-    chunk_index: int,
-    ingredient: str,
-    relation: str,
-    target: str,
-    source_sentence: str,
-) -> str:
-    raw = f"{pmid}|{chunk_index}|{ingredient}|{relation}|{target}|{source_sentence}"
-    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
-
-
 def _normalize_summary(claim: dict) -> str:
     return f'{claim["ingredient"]} {claim["relation"]} {claim["target"]}'
 
 
-def _is_duplicate_within_batch(
-    claim_key: str,
-    seen_claim_keys: set[str],
-) -> bool:
-    if claim_key in seen_claim_keys:
+def _dedup_seen(dedup_scope_key: str, seen: Set[str]) -> bool:
+    if dedup_scope_key in seen:
         return True
-    seen_claim_keys.add(claim_key)
+    seen.add(dedup_scope_key)
     return False
 
 
@@ -274,6 +276,8 @@ def main(silver_batch_id: Optional[str] = None) -> None:
     effect_by_id: Dict[int, Dict] = {row["effect_id"]: row for row in effect_rows}
     concern_by_id: Dict[int, Dict] = {row["concern_id"]: row for row in concern_rows}
 
+    allowed_canonical_ingredients = extractor.get_allowed_ingredient_names()
+
     gold_batch_id = build_batch_id()
     gold_batch_dir = settings.gold_claim_dir / f"batch={gold_batch_id}"
     ensure_dir(gold_batch_dir)
@@ -282,7 +286,10 @@ def main(silver_batch_id: Optional[str] = None) -> None:
     effect_map_records: List[GoldClaimEffectMapRecord] = []
     concern_map_records: List[GoldClaimConcernMapRecord] = []
 
-    seen_claim_keys: set[str] = set()
+    evidence_for_aggregate: List[Dict[str, Any]] = []
+    audit_rows: List[Dict[str, Any]] = []
+    full_claim_export_rows: List[Dict[str, Any]] = []
+    seen_dedup_scope: Set[str] = set()
     total_sentences = 0
     candidate_chunk_count = 0
 
@@ -336,24 +343,157 @@ def main(silver_batch_id: Optional[str] = None) -> None:
                 if validated_claim is None:
                     continue
 
-                claim_key = _build_claim_key(
+                dedup_scope_key = build_dedup_scope_key(
                     pmid=chunk["pmid"],
-                    chunk_index=safe_int(chunk.get("chunk_index")) or 0,
-                    ingredient=validated_claim["ingredient"],
+                    source_sentence=sentence,
+                    ingredient_name=validated_claim["ingredient"],
                     relation=validated_claim["relation"],
                     target=validated_claim["target"],
-                    source_sentence=sentence,
                 )
-
-                if _is_duplicate_within_batch(claim_key, seen_claim_keys):
+                if _dedup_seen(dedup_scope_key, seen_dedup_scope):
                     continue
 
+                evidence_id = build_evidence_id(gold_batch_id, dedup_scope_key)
+                canonical_claim_key = build_canonical_claim_key(
+                    validated_claim["ingredient"],
+                    validated_claim["relation"],
+                    validated_claim["target"],
+                    validated_claim["target_category"],
+                )
+
+                hedging = bool(raw_claim.get("hedging", False))
+                study_context = str(raw_claim.get("study_context") or "unknown").strip() or "unknown"
+                chunk_title = (chunk.get("title") or "").strip()
+
                 normalized_summary = _normalize_summary(validated_claim)
+                all_detected = list_detected_ingredients_in_sentence(
+                    sentence, allowed_canonical_ingredients
+                )
+                all_detected_str = "|".join(all_detected)
+
+                significance_label = label_significance_v2(
+                    sentence,
+                    validated_claim["claim_type"],
+                    validated_claim["relation"],
+                    target=validated_claim["target"],
+                )
+                strength_label = label_strength_v2(sentence, hedging, significance_label)
+                attribution_label = label_attribution_v2(
+                    sentence,
+                    validated_claim["ingredient"],
+                    allowed_canonical_ingredients,
+                    normalized_summary=normalized_summary,
+                    section_type=section_type,
+                    title=chunk_title,
+                )
+                modality_label = label_modality(
+                    validated_claim["claim_type"],
+                    validated_claim["relation"],
+                    sentence,
+                )
+
                 confidence = float(validated_claim["confidence"])
+
+                taxonomy_maps = extractor.infer_taxonomy_maps(
+                    validated_claim=validated_claim,
+                    effect_rows=effect_rows,
+                    concern_rows=concern_rows,
+                )
+                effect_ids_list = list(taxonomy_maps.get("effect_ids") or [])
+                concern_ids_list = list(taxonomy_maps.get("concern_ids") or [])
+
+                eligibility_tier = compute_eligibility_tier(
+                    strength_label,
+                    significance_label,
+                    attribution_label,
+                    validated_claim["claim_type"],
+                    effect_ids_list,
+                    concern_ids_list,
+                    sentence=sentence,
+                    title=chunk_title,
+                    study_context=study_context,
+                )
+                assert_tier_valid(eligibility_tier)
+                is_graph_eligible = is_graph_eligible_tier(eligibility_tier)
+                row_weight = compute_row_weight(
+                    strength_label,
+                    significance_label,
+                    attribution_label,
+                    study_context,
+                )
+
+                has_mapping = bool(effect_ids_list or concern_ids_list)
+                is_review = is_generalized_review_style(sentence, chunk_title, study_context)
+                exclusion_reason, recommendation_reason = build_policy_reasons(
+                    eligibility_tier,
+                    attribution_label,
+                    strength_label,
+                    significance_label,
+                    has_mapping,
+                    is_review,
+                )
+
+                effect_ids_str = "|".join(str(i) for i in sorted(set(effect_ids_list)))
+                concern_ids_str = "|".join(str(i) for i in sorted(set(concern_ids_list)))
+
+                evidence_for_aggregate.append(
+                    {
+                        "canonical_claim_key": canonical_claim_key,
+                        "pmid": chunk["pmid"],
+                        "row_weight": row_weight,
+                        "is_graph_eligible": is_graph_eligible,
+                        "eligibility_tier": eligibility_tier,
+                        "attribution_label": attribution_label,
+                        "ingredient_name": validated_claim["ingredient"],
+                        "relation": validated_claim["relation"],
+                        "target": validated_claim["target"],
+                        "target_category": validated_claim["target_category"],
+                        "effect_ids_list": effect_ids_list,
+                        "concern_ids_list": concern_ids_list,
+                        "study_context": study_context,
+                    }
+                )
+
+                audit_rows.append(
+                    {
+                        "evidence_id": evidence_id,
+                        "batch_id": gold_batch_id,
+                        "pmid": chunk["pmid"],
+                        "title": chunk_title,
+                        "journal": (chunk.get("journal") or "").strip(),
+                        "publication_year": safe_int(chunk.get("publication_year")) or "",
+                        "section_type": section_type,
+                        "chunk_index": safe_int(chunk.get("chunk_index")) or 0,
+                        "source_sentence": sentence,
+                        "ingredient_name": validated_claim["ingredient"],
+                        "relation": validated_claim["relation"],
+                        "target": validated_claim["target"],
+                        "target_category": validated_claim["target_category"],
+                        "normalized_summary": normalized_summary,
+                        "all_detected_ingredients": all_detected_str,
+                        "effect_ids": effect_ids_str,
+                        "concern_ids": concern_ids_str,
+                        "canonical_claim_key": canonical_claim_key,
+                        "strength_label": strength_label,
+                        "significance_label": significance_label,
+                        "attribution_label": attribution_label,
+                        "modality_label": modality_label,
+                        "dedup_scope_key": dedup_scope_key,
+                        "eligibility_tier": eligibility_tier,
+                        "is_graph_eligible": is_graph_eligible,
+                        "row_weight": row_weight,
+                        "study_context": study_context,
+                        "confidence_score": confidence,
+                        "claim_type": validated_claim["claim_type"],
+                        "evidence_direction": validated_claim["evidence_direction"],
+                        "exclusion_reason": exclusion_reason,
+                        "recommendation_reason": recommendation_reason,
+                    }
+                )
 
                 claim_record = GoldClaimRecord(
                     batch_id=gold_batch_id,
-                    claim_key=claim_key,
+                    claim_key=evidence_id,
                     pmid=chunk["pmid"],
                     chunk_index=safe_int(chunk.get("chunk_index")) or 0,
                     section_type=section_type,
@@ -380,20 +520,19 @@ def main(silver_batch_id: Optional[str] = None) -> None:
                 )
                 claim_records.append(claim_record)
 
-                taxonomy_maps = extractor.infer_taxonomy_maps(
-                    validated_claim=validated_claim,
-                    effect_rows=effect_rows,
-                    concern_rows=concern_rows,
-                )
+                export_row = claim_record.to_dict()
+                export_row["eligibility_tier"] = eligibility_tier
+                export_row["all_detected_ingredients"] = all_detected_str
+                full_claim_export_rows.append(export_row)
 
-                for effect_id in taxonomy_maps.get("effect_ids", []):
+                for effect_id in effect_ids_list:
                     row = effect_by_id.get(effect_id)
                     if not row:
                         continue
                     effect_map_records.append(
                         GoldClaimEffectMapRecord(
                             batch_id=gold_batch_id,
-                            claim_key=claim_key,
+                            claim_key=evidence_id,
                             effect_id=row["effect_id"],
                             effect_code=row["effect_code"],
                             effect_name_en=row["effect_name_en"],
@@ -401,14 +540,14 @@ def main(silver_batch_id: Optional[str] = None) -> None:
                         )
                     )
 
-                for concern_id in taxonomy_maps.get("concern_ids", []):
+                for concern_id in concern_ids_list:
                     row = concern_by_id.get(concern_id)
                     if not row:
                         continue
                     concern_map_records.append(
                         GoldClaimConcernMapRecord(
                             batch_id=gold_batch_id,
-                            claim_key=claim_key,
+                            claim_key=evidence_id,
                             concern_id=row["concern_id"],
                             concern_code=row["concern_code"],
                             concern_name_en=row["concern_name_en"],
@@ -423,7 +562,90 @@ def main(silver_batch_id: Optional[str] = None) -> None:
     effect_map_rows = [record.to_dict() for record in effect_map_records]
     concern_map_rows = [record.to_dict() for record in concern_map_records]
 
-    write_csv(gold_batch_dir / "graph_claim.csv", claim_rows)
+    canonical_rows = aggregate_canonical_rows(gold_batch_id, evidence_for_aggregate)
+    if canonical_rows:
+        assert_canonical_score_order(canonical_rows)
+
+    graph_claim_rows = [
+        r
+        for r in full_claim_export_rows
+        if r.get("eligibility_tier") in ("strict_graph", "soft_graph")
+    ]
+    recommendation_claim_rows = [
+        r
+        for r in full_claim_export_rows
+        if r.get("eligibility_tier")
+        in ("strict_graph", "soft_graph", "recommendation_only")
+    ]
+    for r in graph_claim_rows:
+        if r.get("eligibility_tier") not in ("strict_graph", "soft_graph"):
+            raise RuntimeError(
+                "graph_claim.csv purity violated: row not strict_graph/soft_graph"
+            )
+    if len(recommendation_claim_rows) < len(graph_claim_rows):
+        raise RuntimeError(
+            "recommendation_claim must be a superset of graph_claim (v3 invariant)"
+        )
+
+    unmapped_rows: List[Dict[str, Any]] = []
+    excluded_rows: List[Dict[str, Any]] = []
+    graph_eligible_count = 0
+    tier_counts: Dict[str, int] = {
+        "strict_graph": 0,
+        "soft_graph": 0,
+        "recommendation_only": 0,
+        "evidence_only": 0,
+    }
+    attr_counts: Dict[str, int] = {
+        "single_active": 0,
+        "single_formulation": 0,
+        "multi_active_combination": 0,
+        "procedure_combination": 0,
+        "ambiguous": 0,
+    }
+
+    for row in audit_rows:
+        tier = row.get("eligibility_tier") or "evidence_only"
+        if tier in tier_counts:
+            tier_counts[tier] += 1
+        al = row.get("attribution_label") or ""
+        if al in attr_counts:
+            attr_counts[al] += 1
+        if row["is_graph_eligible"]:
+            graph_eligible_count += 1
+        if not row["effect_ids"] and not row["concern_ids"]:
+            unmapped_rows.append(
+                {
+                    "evidence_id": row["evidence_id"],
+                    "batch_id": row["batch_id"],
+                    "pmid": row["pmid"],
+                    "source_sentence": row["source_sentence"],
+                    "ingredient_name": row["ingredient_name"],
+                    "target": row["target"],
+                    "target_category": row["target_category"],
+                    "normalized_summary": row["normalized_summary"],
+                    "reason": "no_effect_and_no_concern_mapping",
+                }
+            )
+        if row.get("eligibility_tier") == "evidence_only":
+            excluded_rows.append(dict(row))
+
+    if len(claim_rows) != len(audit_rows):
+        raise RuntimeError(
+            f"metadata consistency: claim_count {len(claim_rows)} != gold_claim_all {len(audit_rows)}"
+        )
+    if graph_eligible_count != tier_counts["strict_graph"] + tier_counts["soft_graph"]:
+        raise RuntimeError(
+            "graph_eligible_evidence_count must equal strict_graph + soft_graph (v3)"
+        )
+
+    write_csv(gold_batch_dir / "gold_claim_all.csv", audit_rows)
+    write_csv(gold_batch_dir / "gold_canonical_claim.csv", canonical_rows)
+    write_csv(gold_batch_dir / "gold_excluded_claims.csv", excluded_rows)
+    write_csv(gold_batch_dir / "gold_unmapped_targets.csv", unmapped_rows)
+
+    write_csv(gold_batch_dir / "graph_claim.csv", graph_claim_rows)
+    write_csv(gold_batch_dir / "recommendation_claim.csv", recommendation_claim_rows)
     write_csv(gold_batch_dir / "claim_effect_map.csv", effect_map_rows)
     write_csv(gold_batch_dir / "claim_concern_map.csv", concern_map_rows)
 
@@ -441,6 +663,22 @@ def main(silver_batch_id: Optional[str] = None) -> None:
         validator_version=settings.validator_version,
         mapping_version=settings.mapping_version,
         code_version=None,
+        evidence_audit_count=len(audit_rows),
+        canonical_claim_count=len(canonical_rows),
+        graph_eligible_evidence_count=graph_eligible_count,
+        excluded_evidence_count=len(excluded_rows),
+        unmapped_target_count=len(unmapped_rows),
+        graph_claim_row_count=len(graph_claim_rows),
+        recommendation_claim_row_count=len(recommendation_claim_rows),
+        strict_graph_evidence_count=tier_counts["strict_graph"],
+        soft_graph_evidence_count=tier_counts["soft_graph"],
+        recommendation_only_evidence_count=tier_counts["recommendation_only"],
+        evidence_only_count=tier_counts["evidence_only"],
+        single_active_count=attr_counts["single_active"],
+        single_formulation_count=attr_counts["single_formulation"],
+        multi_active_combination_count=attr_counts["multi_active_combination"],
+        procedure_combination_count=attr_counts["procedure_combination"],
+        ambiguous_count=attr_counts["ambiguous"],
     )
     write_json(gold_batch_dir / "metadata.json", metadata)
 

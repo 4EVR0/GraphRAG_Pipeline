@@ -1,0 +1,139 @@
+지금 보이는 핵심 문제 3개
+1. strict_graph 안에 들어가면 안 되는 claim이 들어갔어
+이게 제일 중요해.
+현재 graph_claim.csv 3개 중 2개가 같은 문장에서 나온 Panthenol claim인데, source sentence가 이거야:
+platinum liposome technology
+panthenol
+dipotassium glycyrrhizate
+madecassoside
+Portulaca oleracea extract
+즉 명백한 다성분 + 기술 조합 문장이야.
+그런데 이게 현재는
+all_detected_ingredients = Panthenol
+eligibility_tier = strict_graph
+로 들어가 있어.
+이건 strict precision 관점에서 명백히 잘못된 분류야.
+왜 문제냐
+strict_graph는 원래
+단일 활성 성분
+직접 효능
+비교적 명확한 attribution
+만 들어가야 하는데,
+지금은 ingredient detector가 문장 속 다른 활성 성분들을 못 잡아서 Panthenol 단독 근거처럼 들어간 거야.
+즉 지금 가장 큰 병목은 더 이상 tier 설계가 아니라:
+all_detected_ingredients 추출 recall 부족
+이야.
+2. procedure_combination이 너무 넓게 잡혀서 좋은 formulation evidence가 recommendation으로 밀려
+예를 들면:
+A panthenol-enriched Mask effectively decreased post non-ablative laser erythema...
+이건 지금 recommendation_only로 내려가 있어.
+근데 이 문장은 해석이 두 가지 가능해:
+laser 후 회복용 제품이라서 procedure context
+그래도 제품 efficacy claim 자체는 panthenol-enriched topical evidence
+내 기준에선 이건 strict는 아니더라도 soft_graph 후보야.
+지금처럼 전부 procedure_combination으로 recommendation_only 보내면 recall 손실이 커.
+즉 현재 규칙은
+진짜 병용 시술 치료
+post-procedure recovery topical
+을 너무 비슷하게 보고 있어.
+이 둘은 나눠야 해.
+3. graph eligible이 3개까지 줄어든 건 purity는 좋아졌지만 활용성은 조금 걱정됨
+이번 배치에서
+strict 2
+soft 1
+graph eligible 3
+인데, 30개 중 3개면 **10%**야.
+이게 아주 나쁜 건 아니지만, 지금 strict 2개 중 2개가 오분류 Panthenol 문장이라서,
+실질적으로 “정말 깨끗한 graph claim”은 거의 Ceramide 1개 수준으로 보일 수 있어.
+즉 지금은:
+graph purity를 올리려다
+실제 usable graph edge가 너무 적어질 위험
+이 있어.
+그래서 지금 판단은
+구조
+매우 좋아짐
+exclusion policy
+상당히 좋아짐
+strict precision
+아직 미완성
+다음 병목
+ingredient detection / clause attribution
+바로 수정해야 할 설계 포인트
+1. all_detected_ingredients 추출 로직을 먼저 보강해야 해
+지금 strict 오분류의 원인이 여기야.
+현재는 문장에 여러 활성 성분이 있어도 Panthenol만 잡히는 케이스가 보인다.
+그러면 attribution 판정이 아무리 좋아도 single_active로 잘못 갈 수밖에 없어.
+꼭 넣어야 할 규칙
+문장 안에서 ingredient dictionary 매칭 시:
+comma-separated list 탐지
+such as A, B, C, and D
+supplemented with A and B
+containing A, B, and C
+along with ...
+with soothing ingredients such as ...
+이런 나열 패턴을 우선적으로 잡아.
+특히:
+such as
+along with
+including
+containing
+이거 뒤에 나오는 성분 리스트는 전부 ingredient 후보로 넣어야 해.
+2. procedure를 2종으로 나눠
+지금은 procedure_combination 하나인데, 이게 너무 뭉뚱그려져 있어.
+새로 나누기
+procedure_adjunct_combination
+post_procedure_recovery_formulation
+차이
+procedure_adjunct_combination
+시술 + 성분을 병용 치료로 쓰는 경우
+strict/soft 금지, recommendation_only 유지
+post_procedure_recovery_formulation
+시술 후 회복용 topical formulation
+soft_graph 허용 가능
+예:
+after facial laser treatment, panthenol-enriched mask improved erythema
+→ post_procedure_recovery_formulation
+이렇게 해야 panthenol-enriched mask 같은 좋은 topical evidence를 너무 많이 잃지 않아.
+3. strict_graph 조건에 “detected ingredient count == 1” assert 추가
+이건 꼭 필요해.
+지금 strict_graph로 가기 전에:
+len(all_detected_ingredients_set) == 1
+이 조건을 강제해.
+그리고 만약 source sentence에 list pattern이 보이는데 ingredient set이 1개뿐이면,
+그건 detector suspicious case로 별도 플래그를 주는 게 좋아.
+예:
+ingredient_detection_suspect = True
+그러면 strict로 안 보내고 soft/recommendation으로 내려.
+4. list-pattern safety rule 추가
+이건 regex 수준으로 바로 넣을 수 있어.
+source_sentence에 아래 패턴이 있으면 strict 금지:
+such as .*?, .*?,
+including .*?, .*?,
+along with .*?,
+A, B, and C
+supplemented with A and B
+containing A, B, and C
+즉, ingredient detector가 놓쳤더라도
+문장 패턴 자체가 “다성분 나열”이면 strict로 못 올라가게 막는 거야.
+이건 precision에 엄청 도움 돼.
+구현하면서 주의할 점
+1. ingredient detector 실패를 attribution 함수가 보정해야 해
+지금은 detector가 틀리면 attribution도 연쇄적으로 틀려.
+그래서 attribution 함수에서:
+detected ingredient count
+list-pattern
+conjunction-pattern
+procedure keyword
+를 독립적으로 다시 확인해야 해.
+즉 detector 결과를 100% 신뢰하면 안 돼.
+2. post-procedure 문맥 자체만으로 procedure_combination 처리하면 안 돼
+예:
+“after laser treatment, panthenol mask improved erythema”
+이건 병용치료가 아니라 회복 포뮬레이션일 수 있어.
+그래서
+with microneedling, combined with laser → adjunct
+after laser treatment, recovery after laser → recovery_formulation
+으로 구분해야 해.
+3. strict를 줄이는 건 괜찮지만 soft를 같이 늘려야 해
+지금 strict 오분류를 막으면 graph claim이 더 줄 수 있어.
+그래서 동시에 post_procedure_recovery_formulation -> soft_graph를 열어줘야 전체 graph usable count가 유지돼.
