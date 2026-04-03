@@ -61,6 +61,8 @@ def build_gold_metadata(
     single_formulation_count: int = 0,
     multi_active_combination_count: int = 0,
     procedure_combination_count: int = 0,
+    procedure_adjunct_combination_count: int = 0,
+    post_procedure_recovery_formulation_count: int = 0,
     ambiguous_count: int = 0,
 ) -> dict:
     return {
@@ -90,6 +92,8 @@ def build_gold_metadata(
         "single_formulation_count": single_formulation_count,
         "multi_active_combination_count": multi_active_combination_count,
         "procedure_combination_count": procedure_combination_count,
+        "procedure_adjunct_combination_count": procedure_adjunct_combination_count,
+        "post_procedure_recovery_formulation_count": post_procedure_recovery_formulation_count,
         "ambiguous_count": ambiguous_count,
         "extractor_version": extractor_version,
         "validator_version": validator_version,

@@ -29,6 +29,9 @@ from pipeline.gold.claim.evidence_scoring import (
     build_policy_reasons,
     compute_eligibility_tier,
     compute_row_weight,
+    count_distinct_detection_units,
+    has_strict_blocking_list_pattern,
+    ingredient_detection_suspect,
     is_generalized_review_style,
     is_graph_eligible_tier,
     label_attribution_v2,
@@ -36,6 +39,7 @@ from pipeline.gold.claim.evidence_scoring import (
     label_significance_v2,
     label_strength_v2,
     list_detected_ingredients_in_sentence,
+    reconcile_attribution_v4,
 )
 
 try:
@@ -386,6 +390,9 @@ def main(silver_batch_id: Optional[str] = None) -> None:
                     section_type=section_type,
                     title=chunk_title,
                 )
+                attribution_label = reconcile_attribution_v4(
+                    sentence, attribution_label, all_detected
+                )
                 modality_label = label_modality(
                     validated_claim["claim_type"],
                     validated_claim["relation"],
@@ -412,6 +419,7 @@ def main(silver_batch_id: Optional[str] = None) -> None:
                     sentence=sentence,
                     title=chunk_title,
                     study_context=study_context,
+                    detected_labels=all_detected,
                 )
                 assert_tier_valid(eligibility_tier)
                 is_graph_eligible = is_graph_eligible_tier(eligibility_tier)
@@ -424,6 +432,9 @@ def main(silver_batch_id: Optional[str] = None) -> None:
 
                 has_mapping = bool(effect_ids_list or concern_ids_list)
                 is_review = is_generalized_review_style(sentence, chunk_title, study_context)
+                detected_distinct_count = count_distinct_detection_units(all_detected)
+                list_pattern_strict_block = has_strict_blocking_list_pattern(sentence)
+                detection_suspect = ingredient_detection_suspect(sentence, all_detected)
                 exclusion_reason, recommendation_reason = build_policy_reasons(
                     eligibility_tier,
                     attribution_label,
@@ -488,6 +499,9 @@ def main(silver_batch_id: Optional[str] = None) -> None:
                         "evidence_direction": validated_claim["evidence_direction"],
                         "exclusion_reason": exclusion_reason,
                         "recommendation_reason": recommendation_reason,
+                        "detected_distinct_count": detected_distinct_count,
+                        "list_pattern_strict_block": list_pattern_strict_block,
+                        "ingredient_detection_suspect": detection_suspect,
                     }
                 )
 
@@ -523,6 +537,9 @@ def main(silver_batch_id: Optional[str] = None) -> None:
                 export_row = claim_record.to_dict()
                 export_row["eligibility_tier"] = eligibility_tier
                 export_row["all_detected_ingredients"] = all_detected_str
+                export_row["detected_distinct_count"] = detected_distinct_count
+                export_row["list_pattern_strict_block"] = list_pattern_strict_block
+                export_row["ingredient_detection_suspect"] = detection_suspect
                 full_claim_export_rows.append(export_row)
 
                 for effect_id in effect_ids_list:
@@ -582,6 +599,17 @@ def main(silver_batch_id: Optional[str] = None) -> None:
             raise RuntimeError(
                 "graph_claim.csv purity violated: row not strict_graph/soft_graph"
             )
+        if r.get("eligibility_tier") == "strict_graph":
+            if int(r.get("detected_distinct_count", 0)) != 1:
+                raise RuntimeError(
+                    "v4: strict_graph row must have detected_distinct_count == 1 "
+                    f"(claim_key={r.get('claim_key')})"
+                )
+            if r.get("ingredient_detection_suspect") or r.get("list_pattern_strict_block"):
+                raise RuntimeError(
+                    "v4: strict_graph row must not be list-pattern blocked or detection-suspect "
+                    f"(claim_key={r.get('claim_key')})"
+                )
     if len(recommendation_claim_rows) < len(graph_claim_rows):
         raise RuntimeError(
             "recommendation_claim must be a superset of graph_claim (v3 invariant)"
@@ -600,6 +628,8 @@ def main(silver_batch_id: Optional[str] = None) -> None:
         "single_active": 0,
         "single_formulation": 0,
         "multi_active_combination": 0,
+        "procedure_adjunct_combination": 0,
+        "post_procedure_recovery_formulation": 0,
         "procedure_combination": 0,
         "ambiguous": 0,
     }
@@ -677,7 +707,12 @@ def main(silver_batch_id: Optional[str] = None) -> None:
         single_active_count=attr_counts["single_active"],
         single_formulation_count=attr_counts["single_formulation"],
         multi_active_combination_count=attr_counts["multi_active_combination"],
-        procedure_combination_count=attr_counts["procedure_combination"],
+        procedure_combination_count=attr_counts["procedure_adjunct_combination"]
+        + attr_counts["procedure_combination"],
+        procedure_adjunct_combination_count=attr_counts["procedure_adjunct_combination"],
+        post_procedure_recovery_formulation_count=attr_counts[
+            "post_procedure_recovery_formulation"
+        ],
         ambiguous_count=attr_counts["ambiguous"],
     )
     write_json(gold_batch_dir / "metadata.json", metadata)
