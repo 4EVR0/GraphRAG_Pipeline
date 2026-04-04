@@ -26,6 +26,7 @@ bronze/
 silver/
 gold/
 *.csv
+!config/target_ingredients.csv
 
 graph_goldlayer_design.md
 graph_goldlayer_design_v2.txt

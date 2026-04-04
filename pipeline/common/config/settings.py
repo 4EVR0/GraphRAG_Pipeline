@@ -32,11 +32,11 @@ class Settings:
     request_timeout: int = int(os.getenv("REQUEST_TIMEOUT", "30"))
     request_sleep: float = float(os.getenv("REQUEST_SLEEP", "0.34"))
 
-    # PubMed search
-    search_limit: int = int(os.getenv("SEARCH_LIMIT", "20"))
+    # PubMed search (per-ingredient PMID cap; raise via SEARCH_LIMIT for larger corpora)
+    search_limit: int = int(os.getenv("SEARCH_LIMIT", "50"))
 
-    # Data
-    target_csv_path: str = os.getenv("TARGET_CSV_PATH", "data/target_ingredients.csv")
+    # Target ingredients (repo-root relative or absolute; see target_ingredients_path)
+    target_csv_path: str = os.getenv("TARGET_CSV_PATH", "config/target_ingredients.csv")
 
     # Bronze
     bronze_root_dir: str = os.getenv("BRONZE_ROOT_DIR", "bronze")
@@ -74,6 +74,30 @@ class Settings:
     @property
     def gold_claim_dir(self) -> Path:
         return self.base_dir / self.gold_root_dir / self.gold_domain_dir
+
+    @property
+    def target_ingredients_path(self) -> Path:
+        """Resolved path to target ingredient CSV (cwd-independent)."""
+        p = Path(self.target_csv_path)
+        resolved = p if p.is_absolute() else self.base_dir / p
+        config_path = self.base_dir / "config" / "target_ingredients.csv"
+        strict = os.getenv("STRICT_TARGET_CSV", "").lower() in ("1", "true", "yes")
+
+        # Many .env files still point at data/target_ingredients.csv (short list).
+        # Prefer versioned config when both exist unless STRICT_TARGET_CSV is set.
+        if not strict and config_path.exists():
+            try:
+                legacy_data = (self.base_dir / "data" / "target_ingredients.csv").resolve()
+                if resolved.exists() and resolved.resolve() == legacy_data:
+                    return config_path
+            except OSError:
+                pass
+
+        if resolved.exists():
+            return resolved
+        if config_path.exists():
+            return config_path
+        return resolved
 
 
 settings = Settings()

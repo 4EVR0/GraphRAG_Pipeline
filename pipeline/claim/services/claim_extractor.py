@@ -45,6 +45,9 @@ GENERIC_OR_NON_COSMETIC_TARGETS = {
     "dpcs",
     "anti-acne therapies",
     "peristomal skin complications",
+    "gingival pigmentation",
+    "gingival melanin",
+    "gingival",
 }
 
 NON_COSMETIC_TARGET_PATTERNS = [
@@ -88,6 +91,10 @@ NON_COSMETIC_TARGET_PATTERNS = [
     "ostomy",
     "stoma",
     "peristomal skin complications",
+    "gingival",
+    "rhinitis",
+    "rhinosinusitis",
+    "nasal obstruction",
 ]
 
 ALLOWED_TARGET_HINTS = [
@@ -300,6 +307,45 @@ CANONICAL_INGREDIENT_MAP = {
     "tranexamic acid": "Tranexamic acid",
     "txa": "Tranexamic acid",
     "salicylic acid": "Salicylic acid",
+    "hyaluronic acid": "Hyaluronic acid",
+    "sodium hyaluronate": "Hyaluronic acid",
+    "hyaluronan": "Hyaluronic acid",
+    "l-ascorbic acid": "Ascorbic acid",
+    "ascorbic acid": "Ascorbic acid",
+    "vitamin c": "Ascorbic acid",
+    "vit c": "Ascorbic acid",
+    "azelaic acid": "Azelaic acid",
+    "zinc pca": "Zinc PCA",
+    "zinc pyrrolidone carboxylate": "Zinc PCA",
+    "centella asiatica": "Centella asiatica",
+    "gotu kola": "Centella asiatica",
+    "cica": "Centella asiatica",
+    "madecassoside": "Madecassoside",
+    "retinol": "Retinol",
+    "bakuchiol": "Bakuchiol",
+    "glycolic acid": "Glycolic acid",
+    "lactic acid": "Lactic acid",
+    "alpha arbutin": "Alpha arbutin",
+    "arbutin": "Alpha arbutin",
+    "kojic acid": "Kojic acid",
+    "adenosine": "Adenosine",
+    "caffeine": "Caffeine",
+    "resveratrol": "Resveratrol",
+    "ferulic acid": "Ferulic acid",
+    "green tea": "Green tea extract",
+    "egcg": "Green tea extract",
+    "camellia sinensis": "Green tea extract",
+    "beta-glucan": "Beta-glucan",
+    "β-glucan": "Beta-glucan",
+    "allantoin": "Allantoin",
+    "urea": "Urea",
+    "copper tripeptide-1": "Copper tripeptide-1",
+    "ghk-cu": "Copper tripeptide-1",
+    "copper peptide": "Copper tripeptide-1",
+    "ectoin": "Ectoin",
+    "ubiquinone": "Coenzyme Q10",
+    "coenzyme q10": "Coenzyme Q10",
+    "coq10": "Coenzyme Q10",
 }
 
 
@@ -331,7 +377,7 @@ class ClaimExtractor:
     def _load_ingredient_rules(self) -> Dict[str, Dict[str, List[str]]]:
         rules: Dict[str, Dict[str, List[str]]] = {}
 
-        with open(settings.target_csv_path, "r", encoding="utf-8-sig") as f:
+        with open(settings.target_ingredients_path, "r", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
 
             for row in reader:
@@ -918,8 +964,28 @@ class ClaimExtractor:
             "DEPIGMENTING": ["depigment", "melasma", "hyperpigmentation", "pigmentation", "pih"],
             "BRIGHTENING": ["brightening", "skin tone", "dyschromia"],
             "ANTIOXIDANT": ["antioxidant", "antioxidative", "oxidative stress"],
-            "WOUND_HEALING": ["wound healing", "healing", "repair"],
-            "ANTI_AGING": ["anti-aging", "wrinkle", "elasticity", "aging", "photoaging", "photo-damaged"],
+            "WOUND_HEALING": [
+                "wound healing",
+                "healing",
+                "repair",
+                "regeneration",
+                "skin regeneration",
+                "re-epithelialization",
+                "reepithelialization",
+            ],
+            "ANTI_AGING": [
+                "anti-aging",
+                "wrinkle",
+                "elasticity",
+                "aging",
+                "photoaging",
+                "photo-damaged",
+                "skin remodeling",
+                "skin firmness",
+                "firmness",
+                "fine lines",
+                "collagen synthesis",
+            ],
             "PHOTOPROTECTIVE": ["photoprotective", "uv", "uvb", "photoaging", "photodamaged", "immunosuppression"],
         }
 
