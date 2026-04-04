@@ -9,11 +9,7 @@ from pipeline.common.repositories.paper_repository import (
 from pipeline.metadata.services.pubmed_client import PubMedClient
 from pipeline.metadata.services.pubmed_parser import parse_pubmed_xml
 from pipeline.metadata.services.query_builder import build_pubmed_query
-from pipeline.bronze.pubmed.run_bronze import main
 
-
-if __name__ == "__main__":
-    main()
 
 def validate_environment() -> None:
     if not settings.database_url:
@@ -58,7 +54,7 @@ def ingest_one_target(client: PubMedClient, conn, target: Dict[str, str]) -> Non
 def main() -> None:
     validate_environment()
 
-    targets = load_target_ingredients(settings.target_csv_path)
+    targets = load_target_ingredients(settings.target_ingredients_path)
     if not targets:
         print("[WARN] No target ingredients found.")
         return

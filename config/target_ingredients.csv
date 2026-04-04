@@ -1,0 +1,29 @@
+ingredient_code,category,canonical_name,query_name,alias_list,concern_keywords,exclude_if_contains,is_target
+1,barrier_hydration,Ceramide,Ceramide,"Ceramide NP|Ceramide AP|Ceramide EOP|Ceramide NS|Ceramide NG|Ceramide AS|Ceramide EOS|Ceramide NP C15","barrier|hydration|TEWL|dry skin|xerosis|skin barrier|emollient",,true
+2,barrier_hydration,Panthenol,Panthenol,"D-Panthenol|Dexpanthenol|Provitamin B5","barrier|hydration|erythema|skin barrier|repair|wound",,true
+3,barrier_hydration,Hyaluronic acid,Hyaluronic acid,"Sodium hyaluronate|Hyaluronan|HA","hydration|barrier|TEWL|wrinkle|skin aging|moistur",,true
+4,brightening,Tranexamic acid,Tranexamic acid,"TXA|Transamic acid","melasma|hyperpigmentation|PIH|brightening|pigmentation",,true
+5,brightening,Niacinamide,Niacinamide,"Nicotinamide|NIA|Vitamin B3","hyperpigmentation|melasma|barrier|acne|sebum|pores",,true
+6,brightening,Ascorbic acid,Ascorbic acid,"L-ascorbic acid|Vitamin C|Vit C|LAA","hyperpigmentation|photoaging|brightening|pigmentation|collagen",,true
+7,acne_keratolytic,Salicylic acid,Salicylic acid,"BHA|Beta hydroxy acid","acne|comedones|sebum|keratolytic|pores",,true
+8,acne_keratolytic,Azelaic acid,Azelaic acid,,"acne|rosacea|hyperpigmentation|melasma|comedolytic",,true
+9,acne_sebum,Zinc PCA,Zinc PCA,"Zinc pyrrolidone carboxylate|Zinc salt of L-PCA","acne|sebum|oiliness|skin microbiome",,true
+10,soothing,Centella asiatica,Centella asiatica,"Gotu kola|CICA|Centella extract|Titrated extract of Centella asiatica|TECA","redness|erythema|soothing|barrier|inflammation|wound",,true
+11,soothing,Madecassoside,Madecassoside,,"redness|soothing|barrier|inflammation|erythema",,true
+12,antiaging,Retinol,Retinol,"Vitamin A|All-trans retinol","wrinkle|photoaging|fine lines|collagen|texture",,true
+13,antiaging,Bakuchiol,Bakuchiol,,"wrinkle|photoaging|retinoid alternative|texture",,true
+14,keratolytic,Glycolic acid,Glycolic acid,"AHA|Alpha hydroxy acid","texture|hyperpigmentation|photoaging|keratolytic",,true
+15,keratolytic,Lactic acid,Lactic acid,"AHA|Alpha hydroxy acid","hydration|texture|keratolytic|photoaging",,true
+16,brightening,Alpha arbutin,Alpha arbutin,Arbutin,"hyperpigmentation|melasma|brightening",,true
+17,brightening,Kojic acid,Kojic acid,,"hyperpigmentation|melasma|brightening|pigmentation",,true
+18,barrier_hydration,Adenosine,Adenosine,,"wrinkle|barrier|anti-aging|skin aging",,true
+19,antioxidant,Caffeine,Caffeine,,"photoaging|puffiness|circulation|cellulite|skin",,true
+20,antioxidant,Resveratrol,Resveratrol,,"photoaging|antioxidant|inflammation|barrier",,true
+21,antioxidant,Ferulic acid,Ferulic acid,,"photoaging|antioxidant|vitamin C|hyperpigmentation",,true
+22,antioxidant,Green tea extract,Green tea,"EGCG|Epigallocatechin gallate|Camellia sinensis","photoaging|antioxidant|inflammation|sebum",,true
+23,soothing,Beta-glucan,Beta-glucan,"β-glucan|Beta glucan","barrier|soothing|hydration|redness",,true
+24,barrier_hydration,Allantoin,Allantoin,,"soothing|irritation|barrier|hydration",,true
+25,barrier_hydration,Urea,Urea,"Carbamide","hydration|xerosis|barrier|keratolytic|dry skin",,true
+26,peptide,Copper tripeptide-1,Copper tripeptide-1,"GHK-Cu|Copper peptide","wrinkle|barrier|anti-aging|elasticity",,true
+27,barrier_hydration,Ectoin,Ectoin,,"barrier|hydration|pollution|sensitive skin",,true
+28,antioxidant,Coenzyme Q10,Coenzyme Q10,"Ubiquinone|Ubidecarenone","photoaging|antioxidant|wrinkle",,true

@@ -115,25 +115,28 @@ SEARCH_LIMIT=20
 
 # 입력 데이터
 
-논문 검색 대상 성분은 다음 CSV 파일에서 관리됩니다.
+논문 검색·클레임 추출 허용 성분은 다음 CSV에서 관리합니다(기본 경로는 `config/target_ingredients.csv`, `TARGET_CSV_PATH`로 변경 가능).
 
 ```text
-data/target_ingredients.csv
+config/target_ingredients.csv
 ```
+
+로컬에서 다른 CSV를 쓰려면 `.env`의 `TARGET_CSV_PATH`를 바꾸면 됩니다. 예전에 `data/target_ingredients.csv`만 두었던 경우, 저장소 기본은 `config/target_ingredients.csv`입니다. 레거시 `data/` 경로를 그대로 강제하려면 `STRICT_TARGET_CSV=true`를 설정할 수 있습니다.
 
 예시:
 
 ```csv
-ingredient_code,canonical_name,query_name,alias_list,concern_keywords,is_target
-1,Niacinamide,Niacinamide,"Nicotinamide","acne|barrier|hyperpigmentation",true
+ingredient_code,category,canonical_name,query_name,alias_list,concern_keywords,exclude_if_contains,is_target
+1,brightening,Niacinamide,Niacinamide,Nicotinamide|NIA,hyperpigmentation|melasma|barrier,,true
 ```
 
 | 컬럼               | 설명           |
 | ---------------- | ------------ |
+| category         | 성분 군(문서·샘플링용) |
 | canonical_name   | 성분 표준명       |
 | alias_list       | 성분 동의어       |
 | concern_keywords | 관련 피부 고민 키워드 |
-| is_target        | 논문 수집 대상 여부  |
+| is_target        | 논문 수집·추출 대상 여부  |
 
 ---
 

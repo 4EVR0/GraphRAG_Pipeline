@@ -64,6 +64,8 @@ def build_gold_metadata(
     procedure_adjunct_combination_count: int = 0,
     post_procedure_recovery_formulation_count: int = 0,
     ambiguous_count: int = 0,
+    target_ingredients_file: str | None = None,
+    target_ingredient_count: int | None = None,
 ) -> dict:
     return {
         "layer": "gold",
@@ -100,4 +102,6 @@ def build_gold_metadata(
         "mapping_version": mapping_version,
         "created_at": created_at,
         "code_version": code_version,
+        "target_ingredients_file": target_ingredients_file,
+        "target_ingredient_count": target_ingredient_count,
     }

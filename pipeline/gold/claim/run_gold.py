@@ -281,6 +281,15 @@ def main(silver_batch_id: Optional[str] = None) -> None:
     concern_by_id: Dict[int, Dict] = {row["concern_id"]: row for row in concern_rows}
 
     allowed_canonical_ingredients = extractor.get_allowed_ingredient_names()
+    _ti_path = settings.target_ingredients_path
+    try:
+        target_ingredients_file = str(_ti_path.relative_to(settings.base_dir))
+    except ValueError:
+        target_ingredients_file = str(_ti_path)
+    target_ingredient_count = len(allowed_canonical_ingredients)
+    print(
+        f"[INFO] Target ingredients: {target_ingredient_count} rows from {target_ingredients_file}"
+    )
 
     gold_batch_id = build_batch_id()
     gold_batch_dir = settings.gold_claim_dir / f"batch={gold_batch_id}"
@@ -540,6 +549,8 @@ def main(silver_batch_id: Optional[str] = None) -> None:
                 export_row["detected_distinct_count"] = detected_distinct_count
                 export_row["list_pattern_strict_block"] = list_pattern_strict_block
                 export_row["ingredient_detection_suspect"] = detection_suspect
+                export_row["exclusion_reason"] = exclusion_reason
+                export_row["recommendation_reason"] = recommendation_reason
                 full_claim_export_rows.append(export_row)
 
                 for effect_id in effect_ids_list:
@@ -714,6 +725,8 @@ def main(silver_batch_id: Optional[str] = None) -> None:
             "post_procedure_recovery_formulation"
         ],
         ambiguous_count=attr_counts["ambiguous"],
+        target_ingredients_file=target_ingredients_file,
+        target_ingredient_count=target_ingredient_count,
     )
     write_json(gold_batch_dir / "metadata.json", metadata)
 
