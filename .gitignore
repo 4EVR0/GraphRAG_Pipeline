@@ -25,6 +25,9 @@ data/
 bronze/
 silver/
 gold/
+!pipeline/gold/
+!pipeline/gold/**
+pipeline/gold/**/__pycache__/
 *.csv
 !config/target_ingredients.csv
 
