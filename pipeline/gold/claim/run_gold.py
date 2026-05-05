@@ -1,6 +1,8 @@
 import csv
 from datetime import datetime
 from pathlib import Path
+
+from cosme_common.batch import build_batch_id
 from typing import Any, Dict, List, Optional, Set
 
 from pipeline.claim.services.claim_extractor import extractor
@@ -63,9 +65,6 @@ except Exception:
     insert_claim_effect_map = None
     insert_claim_concern_map = None
 
-
-def build_batch_id() -> str:
-    return datetime.now().astimezone().strftime("%Y-%m-%dT%H-%M-%S")
 
 
 def resolve_silver_batch_dir(silver_batch_id: Optional[str]) -> Path:
