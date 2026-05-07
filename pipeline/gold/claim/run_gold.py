@@ -3,8 +3,8 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-from cosme_common.batch import build_batch_id
-from cosme_common.logging import job_unit
+from oliveyoung_common.batch import build_batch_id
+from oliveyoung_common.logging import job_unit
 from typing import Any, Dict, List, Optional, Set
 
 from pipeline.claim.services.claim_extractor import extractor

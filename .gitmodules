@@ -1,3 +1,3 @@
-[submodule "cosme_common"]
-	path = cosme_common
-	url = https://github.com/4EVR0/cosme_common.git
+[submodule "oliveyoung_common"]
+	path = oliveyoung_common
+	url = https://github.com/4EVR0/oliveyoung_common.git
