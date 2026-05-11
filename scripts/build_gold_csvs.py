@@ -267,6 +267,90 @@ def build_target_ingredients(prod_df: pd.DataFrame, inci_df: pd.DataFrame) -> li
 
 
 # ---------------------------------------------------------------------------
+# COSING 함수 → Effect 매핑 (soft 엣지용)
+# ---------------------------------------------------------------------------
+
+# COSING 함수 → (effect_code 목록, relation)
+_COSING_FUNC_TO_EFFECTS: dict[str, tuple[list[str], str]] = {
+    "SKIN CONDITIONING": (["HYDRATING", "BARRIER_REPAIR"],          "improves"),
+    "HUMECTANT":         (["HYDRATING", "MOISTURE_RETENTION"],      "improves"),
+    "EMOLLIENT":         (["HYDRATING", "BARRIER_REPAIR"],          "improves"),
+    "MOISTURISING":      (["HYDRATING", "MOISTURE_RETENTION"],      "improves"),
+    "SMOOTHING":         (["BARRIER_REPAIR"],                       "improves"),
+    "SKIN PROTECTING":   (["BARRIER_REPAIR", "SOOTHING"],           "improves"),
+    "SOOTHING":          (["SOOTHING", "ANTI_INFLAMMATORY"],        "reduces"),
+    "ANTI-INFLAMMATORY": (["ANTI_INFLAMMATORY", "SOOTHING"],        "reduces"),
+    "ANTIOXIDANT":       (["ANTIOXIDANT", "ANTI_AGING"],            "improves"),
+    "ANTI-AGEING":       (["ANTI_AGING", "ANTIOXIDANT"],            "improves"),
+    "WOUND HEALING":     (["WOUND_HEALING", "BARRIER_REPAIR"],      "improves"),
+    "ANTI-SEBUM":        (["SEBUM_REGULATION"],                     "reduces"),
+    "ASTRINGENT":        (["SEBUM_REGULATION"],                     "reduces"),
+    "TONIC":             (["SEBUM_REGULATION"],                     "reduces"),
+    "ANTIMICROBIAL":     (["ANTIMICROBIAL"],                        "reduces"),
+    "EXFOLIANT":         (["KERATOLYTIC"],                          "improves"),
+    "KERATOLYTIC":       (["KERATOLYTIC"],                          "improves"),
+    "DEPIGMENTING":      (["DEPIGMENTING", "BRIGHTENING"],          "improves"),
+    "SKIN BRIGHTENING":  (["BRIGHTENING", "DEPIGMENTING"],          "improves"),
+    "UV-FILTER":         (["PHOTOPROTECTIVE"],                      "improves"),
+}
+
+
+def build_cosing_soft_edges(
+    prod_df: pd.DataFrame,
+    inci_df: pd.DataFrame,
+    pubmed_seen: set[tuple],
+    valid_effects: set[str],
+) -> list[dict]:
+    """COSING 함수 기반 soft 엣지 생성. pubmed 엣지와 중복은 추가하지 않음."""
+    # inci_name → cosing_functions 조회 (INCI CSV 우선)
+    inci_func_map = (
+        inci_df[["inci_name", "cosing_functions"]]
+        .dropna(subset=["inci_name", "cosing_functions"])
+        .drop_duplicates("inci_name")
+        .set_index("inci_name")["cosing_functions"]
+        .to_dict()
+    )
+    # parquet에서 보완
+    for _, row in prod_df.iterrows():
+        iname = str(row.get("inci_name") or "")
+        if iname and iname not in inci_func_map and pd.notna(row.get("cosing_functions")):
+            inci_func_map[iname] = str(row["cosing_functions"])
+
+    rows: list[dict] = []
+    seen: set[tuple] = set()
+    skipped_pubmed = 0
+
+    for inci_name, funcs_raw in inci_func_map.items():
+        funcs = [_normalize_func(f.strip().upper()) for f in str(funcs_raw).split(";") if f.strip()]
+        for func in funcs:
+            mapping = _COSING_FUNC_TO_EFFECTS.get(func)
+            if not mapping:
+                continue
+            effect_codes, relation = mapping
+            for effect_code in effect_codes:
+                if effect_code not in valid_effects:
+                    continue
+                key = (inci_name, effect_code, relation)
+                if key in pubmed_seen:
+                    skipped_pubmed += 1
+                    continue
+                if key in seen:
+                    continue
+                seen.add(key)
+                rows.append({
+                    ":START_ID(Ingredient)": inci_name,
+                    ":END_ID(Effect)":       effect_code,
+                    "type":                  relation,
+                    "evidence_type":         "cosing_function",
+                    "graph_score:float":     0.0,
+                    "paper_count:int":       0,
+                })
+
+    print(f"[cosing] soft 엣지 {len(rows)}개 생성 (pubmed 중복 {skipped_pubmed}개 제외)")
+    return rows
+
+
+# ---------------------------------------------------------------------------
 # Gold claim 데이터 로드
 # ---------------------------------------------------------------------------
 
@@ -329,6 +413,9 @@ def load_affects_rows(effect_id_to_code: dict[int, str], inci_lookup: dict[str, 
             unmapped_ingredients.add(ingredient_name)
             continue
 
+        graph_score   = float(claim.get("graph_score", 0.0) or 0.0)
+        paper_count   = int(float(claim.get("paper_count_distinct", 1) or 1))
+
         for eid_str in effect_ids_raw.split("|"):
             eid_str = eid_str.strip()
             if not eid_str or eid_str == "nan":
@@ -343,23 +430,25 @@ def load_affects_rows(effect_id_to_code: dict[int, str], inci_lookup: dict[str, 
                 continue
             rows.append({
                 ":START_ID(Ingredient)": inci_name,
-                ":END_ID(Effect)": effect_code,
-                "type": relation,
+                ":END_ID(Effect)":       effect_code,
+                "type":                  relation,
+                "evidence_type":         "pubmed_evidence",
+                "graph_score:float":     round(graph_score, 6),
+                "paper_count:int":       paper_count,
             })
 
     if unmapped_ingredients:
         print(f"[WARN] INCI 매핑 실패 ingredient: {sorted(unmapped_ingredients)}")
 
-    # 중복 제거
-    seen: set[tuple] = set()
-    deduped: list[dict] = []
+    # 같은 (ingredient, effect, type) 중 graph_score 최고값만 유지
+    best: dict[tuple, dict] = {}
     for r in rows:
         key = (r[":START_ID(Ingredient)"], r[":END_ID(Effect)"], r["type"])
-        if key not in seen:
-            seen.add(key)
-            deduped.append(r)
+        if key not in best or r["graph_score:float"] > best[key]["graph_score:float"]:
+            best[key] = r
+    deduped = list(best.values())
 
-    print(f"[affects] 엣지 {len(deduped)}개 생성 (dedup 후)")
+    print(f"[pubmed] 엣지 {len(deduped)}개 생성 (dedup 후)")
     return deduped
 
 
@@ -490,15 +579,26 @@ def main(bucket: str, target_only: bool = False, since: str | None = None) -> No
             except Exception:
                 pass
 
-    affects_rows = load_affects_rows(effect_id_to_code, inci_lookup, since=since)
+    pubmed_rows = load_affects_rows(effect_id_to_code, inci_lookup, since=since)
+
+    # ── COSING soft 엣지 (pubmed 엣지가 없는 성분·효과 쌍 보완) ──────────
+    valid_effects = {r["effect_code"] for r in effect_rows}
+    pubmed_seen: set[tuple] = {
+        (r[":START_ID(Ingredient)"], r[":END_ID(Effect)"], r["type"])
+        for r in pubmed_rows
+    }
+    soft_rows = build_cosing_soft_edges(prod_df, inci_df, pubmed_seen, valid_effects)
+
+    affects_rows = pubmed_rows + soft_rows
+    print(f"[affects] 합계: pubmed {len(pubmed_rows)}개 + cosing {len(soft_rows)}개 = {len(affects_rows)}개")
     write_csv(
         GOLD_EDGES / "affects.csv",
-        [":START_ID(Ingredient)", ":END_ID(Effect)", "type"],
+        [":START_ID(Ingredient)", ":END_ID(Effect)", "type",
+         "evidence_type", "graph_score:float", "paper_count:int"],
         affects_rows,
     )
 
     # ── relates_to.csv ───────────────────────────────────────────────────
-    valid_effects = {r["effect_code"] for r in effect_rows}
     valid_concerns = {r["concern_code"] for r in concern_rows}
     relates_rows = [
         {":START_ID(Effect)": ec, ":END_ID(Concern)": cc}
