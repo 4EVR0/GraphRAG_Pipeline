@@ -11,3 +11,7 @@ pysbd
 
 #LLM api
 openai
+
+# S3 / gold CSV 빌드
+boto3
+pyarrow

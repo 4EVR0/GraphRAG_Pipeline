@@ -494,9 +494,11 @@ def label_attribution_v2(
     normalized_summary: str = "",
     section_type: str = "",
     title: str = "",
+    ingredient_aliases: Sequence[str] = (),
 ) -> str:
     """
     v4: adjunct procedure | post-proc recovery+formulation | multi | formulation | single | ambiguous.
+    ingredient_aliases: all known aliases (e.g. English INCI names) for Korean canonical names.
     """
     _ = normalized_summary, section_type, title
     s = sentence or ""
@@ -520,6 +522,13 @@ def label_attribution_v2(
     ing_ok = _ingredient_in_sentence(ingredient_name, clause) or _ingredient_in_sentence(
         ingredient_name, s
     )
+    # Fallback: check aliases when canonical name doesn't appear in sentence (e.g. Korean name vs English text)
+    if not ing_ok and ingredient_aliases:
+        ing_ok = any(
+            _ingredient_in_sentence(a, clause) or _ingredient_in_sentence(a, s)
+            for a in ingredient_aliases
+            if a.lower() != ingredient_name.lower()
+        )
 
     if _formulation_hit(clause) or _formulation_hit(s):
         if len(tags_pc) <= 1 and ing_ok:
