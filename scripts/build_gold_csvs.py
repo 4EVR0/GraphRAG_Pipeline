@@ -19,6 +19,7 @@ S3 + 로컬 시드 데이터로 Neo4j 임포트용 Gold CSV 파일을 생성합�
 
 import argparse
 import csv
+import datetime
 import io
 import re
 import sys
@@ -37,6 +38,7 @@ CLAIM_BATCH_ROOT = ROOT / "gold" / "claim"
 S3_BUCKET = "oliveyoung-crawl-data"
 S3_PARQUET_PREFIX = "olive_young_gold/gold_product_ingredients/data/"
 S3_INCI_PREFIX = "INCI_data_gold/kcia_cosing/"
+S3_GOLD_PREFIX = "graph_gold_csvs/"
 INCI_FILENAME = "kcia_cosing_gold_ingredients.csv"
 
 
@@ -456,6 +458,36 @@ def load_affects_rows(effect_id_to_code: dict[int, str], inci_lookup: dict[str, 
 # CSV 쓰기
 # ---------------------------------------------------------------------------
 
+def upload_gold_to_s3(bucket: str) -> str:
+    """생성된 gold CSV 전체를 S3에 업로드하고 업로드 prefix를 반환합니다."""
+    s3 = _s3_client()
+    batch_tag = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    prefix = f"{S3_GOLD_PREFIX}batch_job={batch_tag}/"
+
+    upload_targets = [
+        (GOLD_NODES / "ingredient.csv",  f"{prefix}nodes/ingredient.csv"),
+        (GOLD_NODES / "effect.csv",      f"{prefix}nodes/effect.csv"),
+        (GOLD_NODES / "concern.csv",     f"{prefix}nodes/concern.csv"),
+        (GOLD_NODES / "product.csv",     f"{prefix}nodes/product.csv"),
+        (GOLD_EDGES / "affects.csv",     f"{prefix}edges/affects.csv"),
+        (GOLD_EDGES / "relates_to.csv",  f"{prefix}edges/relates_to.csv"),
+        (GOLD_EDGES / "contains.csv",    f"{prefix}edges/contains.csv"),
+    ]
+
+    print(f"\n[S3] gold CSV 업로드 시작 → s3://{bucket}/{prefix}")
+    for local_path, s3_key in upload_targets:
+        if not local_path.exists():
+            print(f"[S3] 파일 없음 (건너뜀): {local_path.relative_to(ROOT)}")
+            continue
+        s3.upload_file(str(local_path), bucket, s3_key)
+        size_kb = local_path.stat().st_size // 1024
+        print(f"[S3] 업로드: {s3_key}  ({size_kb} KB)")
+
+    s3_uri = f"s3://{bucket}/{prefix}"
+    print(f"[S3] 업로드 완료: {s3_uri}")
+    return s3_uri
+
+
 def write_csv(path: Path, fieldnames: list[str], rows: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", newline="", encoding="utf-8") as f:
@@ -469,13 +501,15 @@ def write_csv(path: Path, fieldnames: list[str], rows: list[dict]) -> None:
 # 메인
 # ---------------------------------------------------------------------------
 
-def main(bucket: str, target_only: bool = False, since: str | None = None) -> None:
+def main(bucket: str, target_only: bool = False, since: str | None = None, no_upload: bool = False) -> None:
     print("=" * 60)
     print("Gold CSV 빌드 시작")
     print(f"  S3 bucket : {bucket}")
     print(f"  출력 경로  : gold/nodes/, gold/edges/")
     if target_only:
         print("  모드: target_ingredients.csv 만 생성")
+    if no_upload:
+        print("  S3 업로드: 건너뜀 (--no-upload)")
     print("=" * 60)
 
     # ── S3에서 원본 데이터 로드 ──────────────────────────────────────────
@@ -619,9 +653,17 @@ def main(bucket: str, target_only: bool = False, since: str | None = None) -> No
     )
     print("[INFO] contains.csv: product 데이터 미제공으로 헤더만 생성")
 
+    if no_upload:
+        print()
+        print("=" * 60)
+        print("완료. S3 업로드 건너뜀 (--no-upload 옵션)")
+        print("=" * 60)
+        return
+
+    s3_uri = upload_gold_to_s3(bucket)
     print()
     print("=" * 60)
-    print("완료. 다음 단계: scripts/neo4j_bulk_import_docker.sh 실행")
+    print(f"완료. Gold CSV → {s3_uri}")
     print("=" * 60)
 
 
@@ -632,5 +674,7 @@ if __name__ == "__main__":
                         help="target_ingredients.csv 만 생성하고 종료")
     parser.add_argument("--since", default=None,
                         help="이 날짜(YYYY-MM-DD) 이후 gold 배치만 사용. 예: --since 2026-05-10")
+    parser.add_argument("--no-upload", action="store_true",
+                        help="S3 업로드를 건너뜀 (로컬 CSV만 생성)")
     args = parser.parse_args()
-    main(args.bucket, target_only=args.target_only, since=args.since)
+    main(args.bucket, target_only=args.target_only, since=args.since, no_upload=args.no_upload)
