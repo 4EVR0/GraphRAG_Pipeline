@@ -1,5 +1,6 @@
 import csv
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -73,6 +74,7 @@ logger = logging.getLogger(__name__)
 
 
 def resolve_silver_batch_dir(silver_batch_id: Optional[str]) -> Path:
+    silver_batch_id = silver_batch_id or os.environ.get("SILVER_BATCH_ID")
     if silver_batch_id:
         batch_dir = settings.silver_paper_dir / f"batch={silver_batch_id}"
         if not batch_dir.exists():
@@ -166,20 +168,45 @@ def _dedup_seen(dedup_scope_key: str, seen: Set[str]) -> bool:
     return False
 
 
+def _load_taxonomy_from_seed() -> tuple[List[Dict], List[Dict]]:
+    """DB 없이 로컬 seed SQL 파일에서 taxonomy를 로드합니다."""
+    import re
+    seed_dir = Path(__file__).parent.parent.parent.parent / "db" / "seed"
+
+    effect_sql = (seed_dir / "seed_effect_taxonomy.sql").read_text()
+    effect_rows = [
+        {"effect_id": i, "effect_code": m.group(1), "effect_name_en": m.group(2)}
+        for i, m in enumerate(
+            re.finditer(r"\('([A-Z_]+)',\s*'([^']+)',\s*'[^']+'", effect_sql), 1
+        )
+    ]
+
+    concern_sql = (seed_dir / "seed_concern_taxonomy.sql").read_text()
+    concern_rows = [
+        {"concern_id": i, "concern_code": m.group(1), "concern_name_en": m.group(2)}
+        for i, m in enumerate(
+            re.finditer(r"\('([A-Z_]+)',\s*'([^']+)',\s*'[^']+'", concern_sql), 1
+        )
+    ]
+
+    print(f"[INFO] Taxonomy loaded from seed: {len(effect_rows)} effects, {len(concern_rows)} concerns")
+    return effect_rows, concern_rows
+
+
 def _fetch_taxonomy_rows() -> tuple[List[Dict], List[Dict]]:
-    if not settings.database_url:
-        return [], []
+    if settings.database_url and get_connection and fetch_effect_taxonomy and fetch_concern_taxonomy:
+        try:
+            conn = get_connection(settings.database_url)
+            try:
+                effect_rows = fetch_effect_taxonomy(conn)
+                concern_rows = fetch_concern_taxonomy(conn)
+                return effect_rows, concern_rows
+            finally:
+                conn.close()
+        except Exception as e:
+            print(f"[WARN] DB taxonomy 로드 실패 ({e}), seed 파일로 폴백")
 
-    if not get_connection or not fetch_effect_taxonomy or not fetch_concern_taxonomy:
-        return [], []
-
-    conn = get_connection(settings.database_url)
-    try:
-        effect_rows = fetch_effect_taxonomy(conn)
-        concern_rows = fetch_concern_taxonomy(conn)
-        return effect_rows, concern_rows
-    finally:
-        conn.close()
+    return _load_taxonomy_from_seed()
 
 
 def maybe_upsert_claims_to_db(
@@ -398,6 +425,9 @@ def _main_impl(
                     target=validated_claim["target"],
                 )
                 strength_label = label_strength_v2(sentence, hedging, significance_label)
+                ingredient_aliases = extractor.ingredient_rules.get(
+                    validated_claim["ingredient"], {}
+                ).get("aliases", [])
                 attribution_label = label_attribution_v2(
                     sentence,
                     validated_claim["ingredient"],
@@ -405,6 +435,7 @@ def _main_impl(
                     normalized_summary=normalized_summary,
                     section_type=section_type,
                     title=chunk_title,
+                    ingredient_aliases=ingredient_aliases,
                 )
                 attribution_label = reconcile_attribution_v4(
                     sentence, attribution_label, all_detected
@@ -758,4 +789,8 @@ def main(silver_batch_id: Optional[str] = None) -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--silver-batch-id", default=None)
+    args = parser.parse_args()
+    main(silver_batch_id=args.silver_batch_id)

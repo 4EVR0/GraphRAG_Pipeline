@@ -228,9 +228,3 @@ python -m pipeline.gold.claim.run_gold
 | Bronze | `2026-04-04T09-36-48` | 28개 성분, 논문 539편 수집 |
 | Silver | `2026-04-04T09-38-58` | 1,180 chunks / 6,625 문장 |
 | Gold | `2026-04-04T09-51-56` | 클레임 64건, graph 엣지 7건 (strict 2 / soft 5), 17개 성분 |
-
----
-
-## License
-
-MIT License
