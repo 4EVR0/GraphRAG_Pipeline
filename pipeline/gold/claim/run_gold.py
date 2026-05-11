@@ -1,7 +1,11 @@
 import csv
+import logging
 import os
 from datetime import datetime
 from pathlib import Path
+
+from oliveyoung_common.batch import build_batch_id
+from oliveyoung_common.logging import job_unit
 from typing import Any, Dict, List, Optional, Set
 
 from pipeline.claim.services.claim_extractor import extractor
@@ -65,8 +69,8 @@ except Exception:
     insert_claim_concern_map = None
 
 
-def build_batch_id() -> str:
-    return datetime.now().astimezone().strftime("%Y-%m-%dT%H-%M-%S")
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logger = logging.getLogger(__name__)
 
 
 def resolve_silver_batch_dir(silver_batch_id: Optional[str]) -> Path:
@@ -291,7 +295,10 @@ def maybe_upsert_claims_to_db(
         conn.close()
 
 
-def main(silver_batch_id: Optional[str] = None) -> None:
+def _main_impl(
+    silver_batch_id: Optional[str] = None,
+    gold_batch_id: Optional[str] = None,
+) -> None:
     silver_batch_dir = resolve_silver_batch_dir(silver_batch_id)
     silver_batch_name = silver_batch_dir.name
     silver_batch_id = silver_batch_name.replace("batch=", "")
@@ -318,7 +325,7 @@ def main(silver_batch_id: Optional[str] = None) -> None:
         f"[INFO] Target ingredients: {target_ingredient_count} rows from {target_ingredients_file}"
     )
 
-    gold_batch_id = build_batch_id()
+    gold_batch_id = gold_batch_id or build_batch_id()
     gold_batch_dir = settings.gold_claim_dir / f"batch={gold_batch_id}"
     ensure_dir(gold_batch_dir)
 
@@ -768,6 +775,17 @@ def main(silver_batch_id: Optional[str] = None) -> None:
     )
 
     print(f"[INFO] Gold batch saved to: {gold_batch_dir}")
+
+
+def main(silver_batch_id: Optional[str] = None) -> None:
+    gold_batch_id = build_batch_id()
+    with job_unit(
+        logger,
+        job="graphrag_gold_claim",
+        run_id=gold_batch_id,
+        silver_batch_id=silver_batch_id,
+    ):
+        _main_impl(silver_batch_id=silver_batch_id, gold_batch_id=gold_batch_id)
 
 
 if __name__ == "__main__":
