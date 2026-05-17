@@ -1,0 +1,32 @@
+name: Update oliveyoung_common submodule
+
+on:
+  repository_dispatch:
+    types: [submodule-update]
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.SUBMODULE_UPDATE_PAT }}
+          submodules: recursive
+          ref: main
+
+      - name: Update submodule to latest
+        run: |
+          git submodule update --remote oliveyoung_common
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add oliveyoung_common
+          if git diff --staged --quiet; then
+            echo "Submodule already up to date."
+          else
+            SHA=$(git -C oliveyoung_common rev-parse --short HEAD)
+            git commit -m "chore: bump oliveyoung_common to ${SHA}"
+            git push
+          fi
