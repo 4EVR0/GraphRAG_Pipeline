@@ -6,6 +6,7 @@ from pathlib import Path
 
 from oliveyoung_common.batch import build_batch_id
 from oliveyoung_common.logging import job_unit
+from oliveyoung_common.logging import setup_logging
 from typing import Any, Dict, List, Optional, Set
 
 from pipeline.claim.services.claim_extractor import extractor
@@ -69,7 +70,7 @@ except Exception:
     insert_claim_concern_map = None
 
 
-logging.basicConfig(level=logging.INFO, format="%(message)s")
+setup_logging("graphrag-gold-claim")
 logger = logging.getLogger(__name__)
 
 

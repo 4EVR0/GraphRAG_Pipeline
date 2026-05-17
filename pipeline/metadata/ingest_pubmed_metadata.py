@@ -1,5 +1,8 @@
+import logging
 from typing import Dict
 
+from oliveyoung_common.batch import build_run_id
+from oliveyoung_common.logging import job_unit, setup_logging
 from pipeline.common.config.settings import settings
 from pipeline.common.loaders.ingredient_loader import load_target_ingredients
 from pipeline.common.repositories.paper_repository import (
@@ -9,6 +12,10 @@ from pipeline.common.repositories.paper_repository import (
 from pipeline.metadata.services.pubmed_client import PubMedClient
 from pipeline.metadata.services.pubmed_parser import parse_pubmed_xml
 from pipeline.metadata.services.query_builder import build_pubmed_query
+
+setup_logging("graphrag-pubmed-metadata")
+
+logger = logging.getLogger(__name__)
 
 
 def validate_environment() -> None:
@@ -30,25 +37,25 @@ def ingest_one_target(client: PubMedClient, conn, target: Dict[str, str]) -> Non
         concern_keywords=concern_keywords,
     )
 
-    print(f"\n[INFO] Target: {canonical_name}")
-    print(f"[INFO] Query: {query}")
+    logger.info("Target: %s", canonical_name)
+    logger.info("Query: %s", query)
 
     pmids = client.search_pmids(query=query, retmax=settings.search_limit)
-    print(f"[INFO] Found {len(pmids)} PMIDs")
+    logger.info("Found %s PMIDs", len(pmids))
 
     if not pmids:
         return
 
     xml_text = client.fetch_pubmed_xml(pmids)
     if not xml_text:
-        print("[WARN] No XML returned from PubMed")
+        logger.warning("No XML returned from PubMed")
         return
 
     records = parse_pubmed_xml(xml_text)
     upserted_count = upsert_many_paper_metadata(conn, records)
     conn.commit()
 
-    print(f"[INFO] Upserted {upserted_count} records into paper_metadata")
+    logger.info("Upserted %s records into paper_metadata", upserted_count)
 
 
 def main() -> None:
@@ -56,7 +63,7 @@ def main() -> None:
 
     targets = load_target_ingredients(settings.target_ingredients_path)
     if not targets:
-        print("[WARN] No target ingredients found.")
+        logger.warning("No target ingredients found.")
         return
 
     client = PubMedClient()
@@ -68,10 +75,15 @@ def main() -> None:
                 ingest_one_target(client, conn, target)
             except Exception as exc:
                 conn.rollback()
-                print(f"[ERROR] Failed target={target.get('canonical_name')}: {exc}")
+                logger.error("Failed target=%s: %s", target.get("canonical_name"), exc)
     finally:
         conn.close()
 
 
 if __name__ == "__main__":
-    main()
+    with job_unit(
+        logger,
+        job="graphrag_pubmed_metadata",
+        run_id=build_run_id("graphrag_pubmed_metadata"),
+    ):
+        main()
