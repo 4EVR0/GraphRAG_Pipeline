@@ -1,3 +1,6 @@
+import re
+
+
 BLOCKED_PREFIXES = [
     "BACKGROUND:",
     "OBJECTIVE:",
@@ -87,6 +90,11 @@ COSMETIC_CONTEXT_MARKERS = [
     "tolerance",
     "tewl",
 ]
+
+SEBUM_CONTEXT_PATTERN = re.compile(
+    r"\b(?:sebum|oil|oily|oiliness|pore|pores|seborrhea|seborrheic)\b",
+    re.IGNORECASE,
+)
 
 CLAIM_MARKERS = [
     "improved",
@@ -192,7 +200,10 @@ def is_claim_candidate_sentence(sentence: str) -> bool:
     if normalized.startswith("cer") and len(normalized) >= 4 and normalized[3].isdigit():
         return False
 
-    has_cosmetic_context = any(marker in lower for marker in COSMETIC_CONTEXT_MARKERS)
+    has_cosmetic_context = (
+        any(marker in lower for marker in COSMETIC_CONTEXT_MARKERS)
+        or SEBUM_CONTEXT_PATTERN.search(lower) is not None
+    )
     has_claim_signal = (
         lower.startswith("results:")
         or lower.startswith("result:")
