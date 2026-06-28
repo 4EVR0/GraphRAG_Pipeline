@@ -297,6 +297,28 @@ _COSING_FUNC_TO_EFFECTS: dict[str, tuple[list[str], str]] = {
 }
 
 
+# COSING 함수가 효능을 얼마나 "직접" 지목하는지(구체성) 기반 신뢰도.
+# ⚠️ 측정된 근거(논문 수)가 아니라 큐레이션 휴리스틱이다 — CosIng function은 규제/표기 카테고리이지
+#    입증된 효능이 아니므로, pubmed 점수보다 낮은 밴드(<= 0.15)를 유지해 논문 근거를 앞지르지 못하게 한다.
+#    (evidence tier: regulatory-function < pubmed. 최종 tier 우위는 쿼리의 has_pubmed 정렬로도 보강)
+#    값은 초기 휴리스틱이며 eval(grounding) 측정으로 보정한다.
+_COSING_FUNC_CONFIDENCE: dict[str, float] = {
+    # 직접·1:1 — 함수 용어가 효능을 그대로 지목
+    "ANTI-SEBUM": 0.15, "KERATOLYTIC": 0.15, "EXFOLIANT": 0.15,
+    "ANTIMICROBIAL": 0.15, "ANTIOXIDANT": 0.15, "DEPIGMENTING": 0.15,
+    "ANTI-INFLAMMATORY": 0.15, "WOUND HEALING": 0.15, "UV-FILTER": 0.15,
+    "SKIN BRIGHTENING": 0.12,
+    # 꽤 직접
+    "ASTRINGENT": 0.10, "HUMECTANT": 0.10, "MOISTURISING": 0.10, "SOOTHING": 0.10,
+    "TONIC": 0.06,
+    # generic·1:다 (거의 모든 성분에 붙는 표기) — 낮음
+    "ANTI-AGEING": 0.05, "SKIN CONDITIONING": 0.03, "EMOLLIENT": 0.03,
+    "SMOOTHING": 0.03, "SKIN PROTECTING": 0.03,
+}
+_COSING_DEFAULT_CONFIDENCE = 0.03   # 맵에 없는 함수의 보수적 기본값
+_COSING_SECONDARY_FACTOR = 0.6      # 매핑의 2번째 이후(부차) 효능은 감점
+
+
 def build_cosing_soft_edges(
     prod_df: pd.DataFrame,
     inci_df: pd.DataFrame,
@@ -329,7 +351,8 @@ def build_cosing_soft_edges(
             if not mapping:
                 continue
             effect_codes, relation = mapping
-            for effect_code in effect_codes:
+            confidence = _COSING_FUNC_CONFIDENCE.get(func, _COSING_DEFAULT_CONFIDENCE)
+            for idx, effect_code in enumerate(effect_codes):
                 if effect_code not in valid_effects:
                     continue
                 key = (inci_name, effect_code, relation)
@@ -339,12 +362,14 @@ def build_cosing_soft_edges(
                 if key in seen:
                     continue
                 seen.add(key)
+                # 첫(주) 효능은 full confidence, 2번째 이후(부차)는 감점 → 매핑 구체성 반영
+                score = confidence if idx == 0 else round(confidence * _COSING_SECONDARY_FACTOR, 6)
                 rows.append({
                     ":START_ID(Ingredient)": inci_name,
                     ":END_ID(Effect)":       effect_code,
                     "type":                  relation,
                     "evidence_type":         "cosing_function",
-                    "graph_score:float":     0.0,
+                    "graph_score:float":     score,
                     "paper_count:int":       0,
                 })
 
