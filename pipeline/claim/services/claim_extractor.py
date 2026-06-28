@@ -224,6 +224,11 @@ SKIN_CONTEXT_TERMS = [
     "tolerance",
 ]
 
+SEBUM_CONTEXT_PATTERN = re.compile(
+    r"\b(?:sebum|oil|oily|oiliness|pore|pores|seborrhea|seborrheic)\b",
+    re.IGNORECASE,
+)
+
 POSITIVE_SIGNALS = [
     "improved",
     "improves",
@@ -476,7 +481,10 @@ class ClaimExtractor:
 
     def _has_skin_context(self, text: str) -> bool:
         lower = text.lower()
-        return any(term in lower for term in SKIN_CONTEXT_TERMS)
+        return (
+            any(term in lower for term in SKIN_CONTEXT_TERMS)
+            or SEBUM_CONTEXT_PATTERN.search(lower) is not None
+        )
 
     def _is_blocked_non_cosmetic_domain(self, text: str) -> bool:
         lower = text.lower()
@@ -669,7 +677,10 @@ class ClaimExtractor:
             "facial",
         ]
 
-        return any(term in lower for term in required_context_terms)
+        return (
+            any(term in lower for term in required_context_terms)
+            or SEBUM_CONTEXT_PATTERN.search(lower) is not None
+        )
 
     def _passes_special_context_rule(self, canonical_name: str, text: str) -> bool:
         if canonical_name.lower() == "niacinamide":
