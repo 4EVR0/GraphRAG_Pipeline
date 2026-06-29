@@ -122,6 +122,21 @@ ALLOWED_TARGET_HINTS = [
     "sensitive skin",
     "acne",
     "sebum",
+    "oiliness",
+    "oily skin",
+    "oil control",
+    "pore",
+    "pores",
+    "exfoliation",
+    "keratolytic",
+    "keratolysis",
+    "peeling",
+    "skin renewal",
+    "desquamation",
+    "texture",
+    "roughness",
+    "dullness",
+    "uneven skin tone",
     "immunosuppression",
     "post-inflammatory hyperpigmentation",
     "laser-induced post-inflammatory hyperpigmentation",
@@ -214,6 +229,16 @@ SKIN_CONTEXT_TERMS = [
     "dry skin",
     "brightening",
     "depigmenting",
+    "exfoliation",
+    "keratolytic",
+    "keratolysis",
+    "peeling",
+    "skin renewal",
+    "desquamation",
+    "texture",
+    "roughness",
+    "dullness",
+    "uneven skin tone",
     "repair",
     "anti-aging",
     "laser-induced pih",
@@ -950,6 +975,7 @@ class ClaimExtractor:
             "claim_type": claim_type.strip(),
             "evidence_direction": evidence_direction.strip(),
             "confidence": confidence,
+            "source_sentence": (source_sentence or "").strip(),
         }
 
     def extract_effect_ids(
@@ -969,7 +995,19 @@ class ClaimExtractor:
             "HYDRATING": ["hydration", "hydrate", "hydrating", "moistur", "dry skin"],
             "MOISTURE_RETENTION": ["transepidermal water loss", "tewl", "moisture retention"],
             "SEBUM_REGULATION": ["sebum", "oil control", "oiliness", "oily skin", "pore", "pores"],
-            "KERATOLYTIC": ["keratolytic", "exfoliation", "peeling", "skin renewal", "desquamation"],
+            "KERATOLYTIC": [
+                "keratolytic",
+                "keratolysis",
+                "exfoliation",
+                "peeling",
+                "peel",
+                "peels",
+                "skin renewal",
+                "desquamation",
+                "scab removal",
+                "texture",
+                "roughness",
+            ],
             "COMEDOLYTIC": ["comedone", "blackhead", "whitehead"],
             "ANTIMICROBIAL": ["antimicrobial", "antibacterial", "microbial"],
             "DEPIGMENTING": ["depigment", "melasma", "hyperpigmentation", "pigmentation", "pih"],
@@ -1094,7 +1132,15 @@ class ClaimExtractor:
         effect_rows: List[Dict],
         concern_rows: List[Dict],
     ) -> Dict[str, List[int]]:
-        target_text = validated_claim["target"]
+        target_text = " ".join(
+            part
+            for part in [
+                validated_claim["target"],
+                validated_claim.get("source_sentence"),
+                validated_claim.get("claim_text"),
+            ]
+            if part
+        )
         relation = validated_claim["relation"]
 
         effect_ids = self.extract_effect_ids(target_text, relation, effect_rows)
