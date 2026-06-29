@@ -721,8 +721,18 @@ def compute_eligibility_tier(
     detected_labels: Sequence[str] = (),
 ) -> str:
     """
-    v3 §6 + v4: strict needs single detected unit + no list-pattern / suspect;
-    post_procedure_recovery_formulation → soft_graph like formulation.
+    v5: 화장품 액티브의 논문 근거는 대부분 복합제·리뷰·시술 병용 형태라
+    단일활성 RCT만 통과시키는 v4 정밀도 정책에서 구조적으로 배제됐다(issue #22 진단).
+    품질 하한(not_significant / ambiguous / no_map / weak / 시술 교란)은 유지하되,
+    strong/moderate + 유의미한 근거는 attribution이 낮아도 soft_graph로 진입시킨다.
+    soft_graph 엣지의 graph_score는 _ATTRIBUTION_WEIGHT(multi 0.45 등)·study_context로
+    이미 낮게 산출되므로, 추천 쿼리에서 단일활성 근거보다 아래로 랭크된다(정밀도 보존).
+
+    - strict_graph : single_active + strong/moderate + 단일 검출 + 비리뷰
+    - soft_graph   : strong/moderate + 유의미 + (single_active 동시언급 / single_formulation /
+                     multi_active_combination / post_procedure_recovery_formulation / review)
+    - recommendation_only : weak, 시술 교란(procedure_*)
+    - evidence_only : not_significant, ambiguous, 매핑 없음
     """
     _ = claim_type
     has_map = bool(effect_ids) or bool(concern_ids)
@@ -732,6 +742,7 @@ def compute_eligibility_tier(
     n_det = count_distinct_detection_units(detected_labels)
     strict_allowed = n_det == 1 and not list_block and not suspect
 
+    # ── 품질 하한: 그래프·추천 모두 제외 ───────────────────────────────────
     if significance_label == "not_significant":
         return "evidence_only"
     if attribution_label == "ambiguous":
@@ -739,41 +750,38 @@ def compute_eligibility_tier(
     if not has_map:
         return "evidence_only"
 
+    # ── 시술 교란: 국소 성분에 효과를 귀속할 수 없음 → 추천 랭킹용으로만 ──
     if attribution_label in ("procedure_adjunct_combination", "procedure_combination"):
         return "recommendation_only"
-    if attribution_label == "multi_active_combination":
-        return "recommendation_only"
-    if is_review:
-        return "recommendation_only"
 
+    # ── weak 근거: 추천 랭킹에는 쓰되 그래프 엣지로는 승격하지 않음 ────────
     if strength_label == "weak":
         return "recommendation_only"
 
+    sig_ok = significance_label in ("significant", "unclear", "not_applicable")
+
+    # ── strict graph: 깨끗한 단일활성 근거 ────────────────────────────────
     if (
         attribution_label == "single_active"
         and strength_label in ("strong", "moderate")
         and strict_allowed
+        and not is_review
     ):
         return "strict_graph"
 
+    # ── soft graph: attribution이 낮아도 유효한 근거(graph_score로 하향) ──
     if (
-        attribution_label == "single_active"
-        and strength_label in ("strong", "moderate")
-        and not strict_allowed
-    ):
-        return "recommendation_only"
-
-    if (
-        attribution_label == "single_formulation"
-        and strength_label in ("strong", "moderate")
-        and significance_label in ("significant", "unclear", "not_applicable")
-    ):
-        return "soft_graph"
-
-    if (
-        attribution_label == "post_procedure_recovery_formulation"
-        and strength_label in ("strong", "moderate")
-        and significance_label in ("significant", "unclear", "not_applicable")
+        strength_label in ("strong", "moderate")
+        and sig_ok
+        and (
+            attribution_label in (
+                "single_active",
+                "single_formulation",
+                "multi_active_combination",
+                "post_procedure_recovery_formulation",
+            )
+            or is_review
+        )
     ):
         return "soft_graph"
 

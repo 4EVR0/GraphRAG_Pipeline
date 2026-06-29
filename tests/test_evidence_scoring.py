@@ -76,7 +76,9 @@ class EvidenceScoringTierTest(unittest.TestCase):
                 )
                 self.assertEqual(expected, actual)
 
-    def test_strict_graph_requires_single_detected_unit(self) -> None:
+    def test_single_active_with_comentions_is_soft_not_strict(self) -> None:
+        # v5: 단일활성이지만 리스트/동시언급이라 strict는 못 되더라도
+        # strong+significant면 soft_graph로 진입한다(과거엔 recommendation_only).
         tier = compute_eligibility_tier(
             "strong",
             "significant",
@@ -91,7 +93,62 @@ class EvidenceScoringTierTest(unittest.TestCase):
             detected_labels=["Niacinamide", "Panthenol", "Ceramide NP"],
         )
 
-        self.assertEqual("recommendation_only", tier)
+        self.assertEqual("soft_graph", tier)
+
+    def test_v5_soft_graph_promotions(self) -> None:
+        # multi_active_combination (멀티-애시드 세럼 등) → soft_graph
+        self.assertEqual(
+            "soft_graph",
+            compute_eligibility_tier(
+                "strong", "significant", "multi_active_combination", "efficacy",
+                [301], [],
+                sentence="A multi-acid serum significantly improved acne.",
+                detected_labels=["Salicylic acid", "Glycolic acid"],
+            ),
+        )
+        # generalized review claim → soft_graph (과거엔 recommendation_only)
+        self.assertEqual(
+            "soft_graph",
+            compute_eligibility_tier(
+                "moderate", "significant", "single_active", "efficacy",
+                [302], [],
+                sentence="This systematic review concluded salicylic acid is keratolytic.",
+                detected_labels=["Salicylic acid"],
+                study_context="review",
+            ),
+        )
+
+    def test_v5_quality_floor_still_excludes_from_graph(self) -> None:
+        # 시술 교란 → recommendation_only
+        self.assertEqual(
+            "recommendation_only",
+            compute_eligibility_tier(
+                "strong", "significant", "procedure_adjunct_combination", "efficacy",
+                [401], [],
+                sentence="Combined with fractional laser, the serum improved scars.",
+                detected_labels=["Tranexamic acid"],
+            ),
+        )
+        # weak → recommendation_only
+        self.assertEqual(
+            "recommendation_only",
+            compute_eligibility_tier(
+                "weak", "unclear", "single_active", "efficacy",
+                [402], [],
+                sentence="Centella may improve visible redness.",
+                detected_labels=["Centella asiatica"],
+            ),
+        )
+        # not_significant → evidence_only
+        self.assertEqual(
+            "evidence_only",
+            compute_eligibility_tier(
+                "strong", "not_significant", "single_active", "efficacy",
+                [403], [],
+                sentence="Retinol showed no significant improvement.",
+                detected_labels=["Retinol"],
+            ),
+        )
 
 
 class EvidenceAggregationTest(unittest.TestCase):
