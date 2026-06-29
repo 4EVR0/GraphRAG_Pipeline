@@ -122,6 +122,21 @@ ALLOWED_TARGET_HINTS = [
     "sensitive skin",
     "acne",
     "sebum",
+    "oiliness",
+    "oily skin",
+    "oil control",
+    "pore",
+    "pores",
+    "exfoliation",
+    "keratolytic",
+    "keratolysis",
+    "peeling",
+    "skin renewal",
+    "desquamation",
+    "texture",
+    "roughness",
+    "dullness",
+    "uneven skin tone",
     "immunosuppression",
     "post-inflammatory hyperpigmentation",
     "laser-induced post-inflammatory hyperpigmentation",
@@ -214,6 +229,16 @@ SKIN_CONTEXT_TERMS = [
     "dry skin",
     "brightening",
     "depigmenting",
+    "exfoliation",
+    "keratolytic",
+    "keratolysis",
+    "peeling",
+    "skin renewal",
+    "desquamation",
+    "texture",
+    "roughness",
+    "dullness",
+    "uneven skin tone",
     "repair",
     "anti-aging",
     "laser-induced pih",
@@ -950,6 +975,7 @@ class ClaimExtractor:
             "claim_type": claim_type.strip(),
             "evidence_direction": evidence_direction.strip(),
             "confidence": confidence,
+            "source_sentence": (source_sentence or "").strip(),
         }
 
     def extract_effect_ids(
@@ -968,12 +994,24 @@ class ClaimExtractor:
             "BARRIER_REPAIR": ["barrier", "skin barrier", "barrier function", "tewl"],
             "HYDRATING": ["hydration", "hydrate", "hydrating", "moistur", "dry skin"],
             "MOISTURE_RETENTION": ["transepidermal water loss", "tewl", "moisture retention"],
-            "SEBUM_REGULATION": ["sebum", "oil control", "oily skin"],
-            "KERATOLYTIC": ["keratolytic", "exfoliation", "peeling"],
+            "SEBUM_REGULATION": ["sebum", "oil control", "oiliness", "oily skin", "pore", "pores"],
+            "KERATOLYTIC": [
+                "keratolytic",
+                "keratolysis",
+                "exfoliation",
+                "peeling",
+                "peel",
+                "peels",
+                "skin renewal",
+                "desquamation",
+                "scab removal",
+                "texture",
+                "roughness",
+            ],
             "COMEDOLYTIC": ["comedone", "blackhead", "whitehead"],
             "ANTIMICROBIAL": ["antimicrobial", "antibacterial", "microbial"],
             "DEPIGMENTING": ["depigment", "melasma", "hyperpigmentation", "pigmentation", "pih"],
-            "BRIGHTENING": ["brightening", "skin tone", "dyschromia"],
+            "BRIGHTENING": ["brightening", "skin tone", "dyschromia", "dullness", "uneven skin tone"],
             "ANTIOXIDANT": ["antioxidant", "antioxidative", "oxidative stress"],
             "WOUND_HEALING": [
                 "wound healing",
@@ -1028,7 +1066,7 @@ class ClaimExtractor:
         synonym_map = {
             "ACNE": ["acne", "acne vulgaris", "pimple"],
             "COMEDONES": ["comedone", "comedones", "blackhead", "whitehead"],
-            "OILY_SKIN": ["oily skin", "sebum"],
+            "OILY_SKIN": ["oily skin", "sebum", "oiliness", "oil control"],
             "SENSITIVE_SKIN": ["sensitive skin", "sensitivity", "tolerance", "tolerability"],
             "REDNESS": ["redness", "erythema"],
             "IRRITATED_SKIN": ["irritation", "stinging", "burning"],
@@ -1044,7 +1082,7 @@ class ClaimExtractor:
                 "laser-induced post-inflammatory hyperpigmentation",
                 "post-inflammatory hyperpigmentation",
             ],
-            "DULLNESS": ["dullness", "uneven skin tone"],
+            "DULLNESS": ["dullness", "uneven skin tone", "skin tone"],
             "AGING_SIGNS": ["aging", "wrinkle", "elasticity", "photoaging", "photo-damaged", "photodamaged"],
             "ATOPIC_PRONE": ["atopic", "atopic dermatitis"],
             "ROSACEA_PRONE": ["rosacea"],
@@ -1094,7 +1132,15 @@ class ClaimExtractor:
         effect_rows: List[Dict],
         concern_rows: List[Dict],
     ) -> Dict[str, List[int]]:
-        target_text = validated_claim["target"]
+        target_text = " ".join(
+            part
+            for part in [
+                validated_claim["target"],
+                validated_claim.get("source_sentence"),
+                validated_claim.get("claim_text"),
+            ]
+            if part
+        )
         relation = validated_claim["relation"]
 
         effect_ids = self.extract_effect_ids(target_text, relation, effect_rows)

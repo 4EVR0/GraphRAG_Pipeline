@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from oliveyoung_common.batch import build_batch_id
+from oliveyoung_common.batch import build_run_id
 from oliveyoung_common.logging import job_unit
 from oliveyoung_common.logging import setup_logging
 from typing import Any, Dict, List, Optional, Set
@@ -72,6 +72,10 @@ except Exception:
 
 setup_logging("graphrag-gold-claim")
 logger = logging.getLogger(__name__)
+
+
+def build_batch_id() -> str:
+    return build_run_id("graphrag_gold_claim")
 
 
 def resolve_silver_batch_dir(silver_batch_id: Optional[str]) -> Path:

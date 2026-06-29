@@ -6,7 +6,7 @@ ingredient_code,category,canonical_name,query_name,alias_list,concern_keywords,e
 5,barrier_hydration,소듐하이알루로네이트,Sodium Hyaluronate,SODIUM HYALURONATE,hydration|moisturizing|TEWL|water retention|barrier|dry skin|skin barrier,,true
 6,hair,판테놀,Panthenol,PANTHENOL,hair conditioning|hair repair|hair damage|barrier|hydration|moisturizing|dry skin|skin barrier,,true
 7,anti_aging,토코페롤,Tocopherol,TOCOPHEROL,anti-aging|oxidative stress|photoaging|free radical|barrier|hydration|moisturizing|dry skin|skin barrier,,true
-8,barrier_hydration,나이아신아마이드,Niacinamide,NIACINAMIDE,skin texture|smoothing|roughness|pore|skin tone,,true
+8,acne_control,나이아신아마이드,Niacinamide,NIACINAMIDE,sebum|oiliness|oily skin|oil control|acne|pore|pores|skin texture|smoothing|roughness|skin tone|brightening|hyperpigmentation|dullness|uneven skin tone,,true
 9,cleansing,하이드로제네이티드레시틴,Hydrogenated Lecithin,HYDROGENATED LECITHIN,cleansing|surfactant|foam|barrier|hydration|moisturizing|dry skin|skin barrier,,true
 10,barrier_hydration,카프릴릭/카프릭트라이글리세라이드,Caprylic/Capric Triglyceride,CAPRYLIC/CAPRIC TRIGLYCERIDE,barrier|hydration|moisturizing|dry skin|skin barrier,,true
 11,barrier_hydration,아데노신,Adenosine,ADENOSINE,barrier|hydration|moisturizing|dry skin|skin barrier,,true
@@ -48,7 +48,7 @@ ingredient_code,category,canonical_name,query_name,alias_list,concern_keywords,e
 47,barrier_hydration,팔미틱애씨드,Palmitic Acid,PALMITIC ACID,barrier|hydration|moisturizing|dry skin|skin barrier|cleansing|surfactant|foam,,true
 48,barrier_hydration,세틸에틸헥사노에이트,Cetyl Ethylhexanoate,CETYL ETHYLHEXANOATE,barrier|hydration|moisturizing|dry skin|skin barrier,,true
 49,acne_control,녹차추출물,Camellia Sinensis Leaf Extract,CAMELLIA SINENSIS FLOWER WATER,sebum|acne|pore|oiliness,,true
-50,hair,살리실릭애씨드,Salicylic Acid,SALICYLIC ACID,hair conditioning|hair repair|hair damage|exfoliation|keratolytic|skin renewal|barrier|hydration|moisturizing|dry skin|skin barrier,,true
+50,exfoliation,살리실릭애씨드,Salicylic Acid,SALICYLIC ACID,exfoliation|keratolytic|skin renewal|desquamation|comedolytic|comedone|blackhead|whitehead|acne|sebum|oiliness|oily skin|pore|pores,,true
 51,barrier_hydration,트레할로오스,Trehalose,TREHALOSE,hydration|moisturizing|TEWL|water retention|dry skin,,true
 52,other,하이드록시에틸아크릴레이트/소듐아크릴로일다이메틸타우레이트코폴리머,Hydroxyethyl Acrylate/Sodium Acryloyldimethyl Taurate Copolymer,HYDROXYETHYL ACRYLATE/SODIUM ACRYLOYLDIMETHYL TAURATE COPOLYMER,,,true
 53,barrier_hydration,글루코오스,Glucose,GLUCOSE,hydration|moisturizing|TEWL|water retention,,true
@@ -57,7 +57,7 @@ ingredient_code,category,canonical_name,query_name,alias_list,concern_keywords,e
 56,barrier_hydration,마데카식애씨드,Madecassic Acid,MADECASSIC ACID,barrier|hydration|moisturizing|dry skin|skin barrier,,true
 57,barrier_hydration,세테아릴올리베이트,Cetearyl Olivate,CETEARYL OLIVATE,barrier|hydration|moisturizing|dry skin|skin barrier|cleansing|surfactant|foam|hair conditioning|hair repair|hair damage,,true
 58,barrier_hydration,아시아틱애씨드,Asiatic Acid,ASIATIC ACID,barrier|hydration|moisturizing|dry skin|skin barrier,,true
-59,barrier_hydration,글루코노락톤,Gluconolactone,GLUCONOLACTONE,barrier|hydration|moisturizing|dry skin|skin barrier,,true
+59,exfoliation,글루코노락톤,Gluconolactone,GLUCONOLACTONE,exfoliation|keratolytic|skin renewal|desquamation|texture|roughness|pore|pores|brightening|dullness|uneven skin tone,,true
 60,barrier_hydration,포타슘하이알루로네이트,Potassium Hyaluronate,POTASSIUM HYALURONATE,barrier|hydration|moisturizing|dry skin|skin barrier,,true
 61,anti_aging,올리브오일,Olea Europaea (Olive) Fruit Oil,OLEA EUROPAEA BUD EXTRACT,anti-aging|oxidative stress|photoaging|free radical|barrier|hydration|moisturizing|dry skin|skin barrier,,true
 62,hair,호호바씨오일,Simmondsia Chinensis (Jojoba) Seed Oil,SIMMONDSIA CHINENSIS SEED WAX,hair conditioning|hair repair|hair damage|barrier|hydration|moisturizing|dry skin|skin barrier,,true
@@ -72,14 +72,14 @@ ingredient_code,category,canonical_name,query_name,alias_list,concern_keywords,e
 71,barrier_hydration,베헤닐알코올,Behenyl Alcohol,BEHENYL ALCOHOL,barrier|hydration|moisturizing|dry skin|skin barrier,,true
 72,pore_control,제라니올,Geraniol,GERANIOL,toning|skin tone|pore,,true
 73,barrier_hydration,글리세레스-26,Glycereth-26,GLYCERETH-12,hydration|moisturizing|TEWL|water retention,,true
-74,anti_aging,아스코빅애씨드,Ascorbic Acid,ASCORBIC ACID,anti-aging|oxidative stress|photoaging|free radical|barrier|hydration|moisturizing|dry skin|skin barrier,,true
+74,brightening,아스코빅애씨드,Ascorbic Acid,ASCORBIC ACID,brightening|hyperpigmentation|melasma|pigmentation|melanin|skin tone|dullness|uneven skin tone|antioxidant|oxidative stress|photoaging|free radical,,true
 75,hair,말토덱스트린,Maltodextrin,MALTODEXTRIN,hair conditioning|hair repair|hair damage|barrier|hydration|moisturizing|dry skin|skin barrier,,true
 76,barrier_hydration,에틸헥실팔미테이트,Ethylhexyl Palmitate,ETHYLHEXYL PALMITATE,barrier|hydration|moisturizing|dry skin|skin barrier,,true
 77,barrier_hydration,아세틸헥사펩타이드-8,Acetyl Hexapeptide-8,ACETYL HEXAPEPTIDE-8,hydration|moisturizing|TEWL|water retention|barrier|dry skin|skin barrier,,true
 78,other,실리카,Silica,SOLUM DIATOMEAE,,,true
 79,soothing,울금뿌리추출물,Curcuma Longa (Turmeric) Root Extract,CURCUMA LONGA CALLUS EXTRACT,barrier|skin protection|soothing|irritation,,true
 80,barrier_hydration,자일리톨,Xylitol,XYLITOL,hydration|moisturizing|TEWL|water retention|barrier|dry skin|skin barrier,,true
-81,barrier_hydration,카프릴로일살리실릭애씨드,Capryloyl Salicylic Acid,CAPRYLOYL SALICYLIC ACID,barrier|hydration|moisturizing|dry skin|skin barrier,,true
+81,exfoliation,카프릴로일살리실릭애씨드,Capryloyl Salicylic Acid,CAPRYLOYL SALICYLIC ACID,exfoliation|keratolytic|skin renewal|desquamation|comedolytic|acne|sebum|oiliness|pore|pores,,true
 82,cleansing,라우릭애씨드,Lauric Acid,LAURIC ACID,cleansing|pore|impurity|surfactant|foam,,true
 83,barrier_hydration,레시틴,Lecithin,LECITHIN,barrier|hydration|moisturizing|dry skin|skin barrier|cleansing|surfactant|foam,,true
 84,anti_aging,쇠비름추출물,Portulaca Oleracea Extract,PORTULACA OLERACEA FLOWER/LEAF/STEM EXTRACT,anti-aging|oxidative stress|photoaging|free radical|barrier|hydration|moisturizing|dry skin|skin barrier,,true
@@ -135,10 +135,10 @@ ingredient_code,category,canonical_name,query_name,alias_list,concern_keywords,e
 134,barrier_hydration,칡뿌리추출물,Pueraria Lobata Root Extract,PUERARIA LOBATA FLOWER EXTRACT,barrier|hydration|moisturizing|dry skin|skin barrier,,true
 135,hair,프롤린,Proline,PROLINE,hair conditioning|hair repair|hair damage|barrier|hydration|moisturizing|dry skin|skin barrier,,true
 136,barrier_hydration,돌콩오일,Glycine Soja (Soybean) Oil,GLYCINE SOJA OIL,barrier|hydration|moisturizing|dry skin|skin barrier,,true
-137,barrier_hydration,락틱애씨드,Lactic Acid,LACTIC ACID,hydration|moisturizing|TEWL|water retention|barrier|dry skin|skin barrier,,true
+137,exfoliation,락틱애씨드,Lactic Acid,LACTIC ACID,exfoliation|keratolytic|skin renewal|desquamation|texture|roughness|dullness|uneven skin tone|brightening|hydration,,true
 138,cleansing,피이지-100스테아레이트,PEG-100 Stearate,PEG-18 STEARATE,cleansing|surfactant|foam,,true
 139,barrier_hydration,히스티딘,Histidine,HISTIDINE,hydration|moisturizing|TEWL|water retention|barrier|dry skin|skin barrier,,true
-140,barrier_hydration,흰버드나무껍질추출물,Salix Alba (Willow) Bark Extract,SALIX ALBA EXTRACT,barrier|hydration|moisturizing|dry skin|skin barrier,,true
+140,exfoliation,흰버드나무껍질추출물,Salix Alba (Willow) Bark Extract,SALIX ALBA EXTRACT,exfoliation|keratolytic|skin renewal|acne|sebum|oiliness|pore|pores,,true
 141,barrier_hydration,만니톨,Mannitol,MANNITOL,hydration|moisturizing|TEWL|water retention|dry skin|barrier|skin barrier,,true
 142,hair,세라마이드에이피,Ceramide AP,CERAMIDE AP,hair conditioning|hair repair|hair damage|barrier|hydration|moisturizing|dry skin|skin barrier,,true
 143,barrier_hydration,세틸알코올,Cetyl Alcohol,CETYL ALCOHOL,barrier|hydration|moisturizing|dry skin|skin barrier|cleansing|surfactant|foam,,true
@@ -149,7 +149,7 @@ ingredient_code,category,canonical_name,query_name,alias_list,concern_keywords,e
 148,hair,메틸트라이메티콘,Methyl Trimethicone,METHYL TRIMETHICONE,hair conditioning|hair repair|hair damage|barrier|hydration|moisturizing|dry skin|skin barrier,,true
 149,barrier_hydration,카카오추출물,Theobroma Cacao (Cocoa) Extract,THEOBROMA CACAO SEED BUTTER,barrier|hydration|moisturizing|dry skin|skin barrier|skin protection|soothing|irritation,,true
 150,acne_control,클로페네신,Chlorphenesin,CHLORPHENESIN,acne|bacteria|antimicrobial|inflammation,,true
-151,barrier_hydration,3-O-에틸아스코빅애씨드,3-O-Ethyl Ascorbic Acid,3-O-ETHYL ASCORBIC ACID,barrier|hydration|moisturizing|dry skin|skin barrier,,true
+151,brightening,3-O-에틸아스코빅애씨드,3-O-Ethyl Ascorbic Acid,3-O-ETHYL ASCORBIC ACID,brightening|hyperpigmentation|melasma|pigmentation|melanin|skin tone|dullness|uneven skin tone|antioxidant|photoaging,,true
 152,cleansing,글리세릴스테아레이트에스이,Glyceryl Stearate SE,GLYCERYL STEARATE SE,cleansing|surfactant|foam,,true
 153,cleansing,코코-글루코사이드,Coco-Glucoside,COCO-GLUCOSIDE,cleansing|pore|impurity|surfactant|foam,,true
 154,barrier_hydration,사이클로펜타실록세인,Cyclopentasiloxane,CYCLOPENTASILOXANE,barrier|hydration|moisturizing|dry skin|skin barrier|hair conditioning|hair repair|hair damage,,true
@@ -169,7 +169,7 @@ ingredient_code,category,canonical_name,query_name,alias_list,concern_keywords,e
 168,other,C14-22알코올,C14-22 Alcohols,C14-22 ALCOHOLS,,,true
 169,barrier_hydration,팔미토일트라이펩타이드-5,Palmitoyl Tripeptide-5,PALMITOYL TRIPEPTIDE-5,barrier|hydration|moisturizing|dry skin|skin barrier,,true
 170,pore_control,대왕소나무잎추출물,Pinus Palustris Leaf Extract,PINUS PALUSTRIS LEAF EXTRACT,toning|skin tone|pore,,true
-171,anti_aging,소듐아스코빌포스페이트,Sodium Ascorbyl Phosphate,SODIUM ASCORBYL PHOSPHATE,anti-aging|oxidative stress|photoaging|free radical,,true
+171,brightening,소듐아스코빌포스페이트,Sodium Ascorbyl Phosphate,SODIUM ASCORBYL PHOSPHATE,brightening|hyperpigmentation|melasma|pigmentation|melanin|skin tone|dullness|uneven skin tone|acne|sebum|antioxidant|oxidative stress,,true
 172,barrier_hydration,스테아릴알코올,Stearyl Alcohol,STEARYL ALCOHOL,barrier|hydration|moisturizing|dry skin|skin barrier|cleansing|surfactant|foam,,true
 173,hair,발린,Valine,VALINE,hair conditioning|hair repair|hair damage|barrier|hydration|moisturizing|dry skin|skin barrier,,true
 174,hair,아이소류신,Isoleucine,ISOLEUCINE,hair conditioning|hair repair|hair damage|barrier|hydration|moisturizing|dry skin|skin barrier,,true
@@ -220,15 +220,15 @@ ingredient_code,category,canonical_name,query_name,alias_list,concern_keywords,e
 219,other,폴리쿼터늄-7,Polyquaternium-7,POLYQUATERNIUM-7,,,true
 220,barrier_hydration,"2,3-부탄다이올","2,3-Butanediol","2,3-BUTANEDIOL",hydration|moisturizing|TEWL|water retention|barrier|dry skin|skin barrier,,true
 221,barrier_hydration,동백나무씨오일,Camellia Japonica Seed Oil,CAMELLIA JAPONICA SEED EXTRACT,barrier|hydration|moisturizing|dry skin|skin barrier,,true
-222,barrier_hydration,징크피씨에이,Zinc PCA,ZINC PCA,hydration|moisturizing|TEWL|water retention|barrier|dry skin|skin barrier,,true
-223,pore_control,트라넥사믹애씨드,Tranexamic Acid,TRANEXAMIC ACID,pore|toning|astringent|sebum|barrier|hydration|moisturizing|dry skin|skin barrier,,true
+222,acne_control,징크피씨에이,Zinc PCA,ZINC PCA,sebum|oiliness|oily skin|oil control|acne|pore|pores|anti-inflammatory|inflammation,,true
+223,brightening,트라넥사믹애씨드,Tranexamic Acid,TRANEXAMIC ACID,brightening|hyperpigmentation|melasma|pigmentation|melanin|skin tone|dullness|uneven skin tone|post-inflammatory hyperpigmentation|pih,,true
 224,barrier_hydration,폴리글리세릴-10미리스테이트,Polyglyceryl-10 Myristate,POLYGLYCERYL-10 MYRISTATE,barrier|hydration|moisturizing|dry skin|skin barrier,,true
 225,barrier_hydration,프룩토오스,Fructose,FRUCTOSE,hydration|moisturizing|TEWL|water retention,,true
 226,barrier_hydration,카프릴릴메티콘,Caprylyl Methicone,CAPRYLYL TRISILOXANE,barrier|hydration|moisturizing|dry skin|skin barrier,,true
 227,barrier_hydration,티트리잎추출물,Melaleuca Alternifolia (Tea Tree) Leaf Extract,MELALEUCA ALTERNIFOLIA LEAF EXTRACT,barrier|hydration|moisturizing|dry skin|skin barrier,,true
 228,anti_aging,펜타에리스리틸테트라-다이-t-부틸하이드록시하이드로신나메이트,Pentaerythrityl Tetra-di-t-butyl Hydroxyhydrocinnamate,PENTAERYTHRITYL TETRA-DI-T-BUTYL HYDROXYHYDROCINNAMATE,anti-aging|oxidative stress|photoaging|free radical,,true
 229,hair,소듐피씨에이,Sodium PCA,SODIUM PCA,hair conditioning|hair repair|hair damage|hydration|moisturizing|TEWL|water retention|barrier|dry skin|skin barrier,,true
-230,anti_aging,아스코빌글루코사이드,Ascorbyl Glucoside,ASCORBYL GLUCOSIDE,anti-aging|oxidative stress|photoaging|free radical,,true
+230,brightening,아스코빌글루코사이드,Ascorbyl Glucoside,ASCORBYL GLUCOSIDE,brightening|hyperpigmentation|melasma|pigmentation|melanin|skin tone|dullness|uneven skin tone|antioxidant|oxidative stress,,true
 231,barrier_hydration,페닐트라이메티콘,Phenyl Trimethicone,BISPHENYLHEXAMETHICONE,barrier|hydration|moisturizing|dry skin|skin barrier|hair conditioning|hair repair|hair damage,,true
 232,barrier_hydration,편백잎추출물,Chamaecyparis Obtusa Leaf Extract,CHAMAECYPARIS OBTUSA BRANCH/LEAF EXTRACT,hydration|moisturizing|TEWL|water retention|barrier|dry skin|skin barrier,,true
 233,barrier_hydration,다이메틸실란올하이알루로네이트,Dimethylsilanol Hyaluronate,DIMETHYLSILANOL HYALURONATE,hydration|moisturizing|TEWL|water retention|dry skin|barrier|skin barrier,,true
@@ -327,14 +327,14 @@ ingredient_code,category,canonical_name,query_name,alias_list,concern_keywords,e
 326,cleansing,라우릴베타인,Lauryl Betaine,LAURYL BETAINE,cleansing|pore|impurity|hair conditioning|hair repair|hair damage|barrier|hydration|moisturizing|dry skin|skin barrier|surfactant|foam,,true
 327,acne_control,바쿠치올,Bakuchiol,BAKUCHIOL,acne|bacteria|antimicrobial|inflammation|anti-aging|oxidative stress|photoaging|free radical|barrier|hydration|moisturizing|dry skin|skin barrier,,true
 328,barrier_hydration,비스-피이지-18메틸에터다이메틸실레인,Bis-PEG-18 Methyl Ether Dimethyl Silane,BIS-PEG-18 METHYL ETHER DIMETHYL SILANE,barrier|hydration|moisturizing|dry skin|skin barrier|cleansing|surfactant|foam|hair conditioning|hair repair|hair damage|TEWL|water retention,,true
-329,barrier_hydration,우레아,Urea,UREA,hydration|moisturizing|TEWL|water retention|barrier|dry skin|skin barrier,,true
+329,exfoliation,우레아,Urea,UREA,exfoliation|keratolytic|skin renewal|desquamation|roughness|dry skin|xerosis|hydration|moisturizing,,true
 330,acne_control,프로폴리스추출물,Propolis Extract,PROPOLIS CERA,sebum|acne|pore|oiliness|hydration|moisturizing|dry skin|TEWL|skin texture|smoothing|roughness|skin tone,,true
 331,hair,피리독신,Pyridoxine,PYRIDOXINE,hair conditioning|hair repair|hair damage|barrier|hydration|moisturizing|dry skin|skin barrier,,true
 332,barrier_hydration,쑥잎추출물,Artemisia Princeps Leaf Extract,ARTEMISIA PRINCEPS LEAF EXTRACT,barrier|hydration|moisturizing|dry skin|skin barrier,,true
 333,cleansing,포타슘코코에이트,Potassium Cocoate,POTASSIUM COCOATE,cleansing|surfactant|foam,,true
 334,other,글라이코실트레할로오스,Glycosyl Trehalose,GLYCOSYL TREHALOSE,,,true
 335,cleansing,소듐C14-16올레핀설포네이트,Sodium C14-16 Olefin Sulfonate,SODIUM C14-16 OLEFIN SULFONATE,cleansing|pore|impurity|surfactant|foam,,true
-336,anti_aging,알부틴,Arbutin,ARBUTIN,anti-aging|oxidative stress|photoaging|free radical|barrier|hydration|moisturizing|dry skin|skin barrier,,true
+336,brightening,알부틴,Arbutin,ARBUTIN,brightening|hyperpigmentation|melasma|pigmentation|melanin|skin tone|dullness|uneven skin tone,,true
 337,other,암모늄폴리아크릴로일다이메틸타우레이트,Ammonium Polyacryloyldimethyl Taurate,AMMONIUM POLYACRYLOYLDIMETHYL TAURATE,,,true
 338,barrier_hydration,에틸헥실스테아레이트,Ethylhexyl Stearate,ETHYLHEXYL STEARATE,barrier|hydration|moisturizing|dry skin|skin barrier,,true
 339,cleansing,피피지-13-데실테트라데세스-24,PPG-13-Decyltetradeceth-24,PPG-13-DECYLTETRADECETH-24,cleansing|surfactant|foam,,true
@@ -431,16 +431,16 @@ ingredient_code,category,canonical_name,query_name,alias_list,concern_keywords,e
 430,soothing,멘톨,Menthol,MENTHOL,soothing|calming|irritation|sensitive skin|erythema,,true
 431,other,숯가루,Charcoal Powder,CARBON,,,true
 432,barrier_hydration,아세틸테트라펩타이드-9,Acetyl Tetrapeptide-9,ACETYL TETRAPEPTIDE-9,barrier|hydration|moisturizing|dry skin|skin barrier,,true
-433,acne_control,징크글루코네이트,Zinc Gluconate,ZINC GLUCONATE,acne|bacteria|antimicrobial|inflammation|barrier|hydration|moisturizing|dry skin|skin barrier,,true
+433,acne_control,징크글루코네이트,Zinc Gluconate,ZINC GLUCONATE,sebum|oiliness|oily skin|oil control|acne|pore|pores|bacteria|antimicrobial|inflammation,,true
 434,cleansing,피이지-6카프릴릭/카프릭글리세라이즈,PEG-6 Caprylic/Capric Glycerides,PEG-6 CAPRYLIC/CAPRIC GLYCERIDES,cleansing|surfactant|foam,,true
 435,barrier_hydration,귤껍질추출물,Citrus Unshiu Peel Extract,CITRUS UNSHIU EXTRACT,barrier|hydration|moisturizing|dry skin|skin barrier,,true
 436,pore_control,리씨열매오일,Litsea Cubeba Fruit Oil,LITSEA CUBEBA FRUIT OIL,toning|skin tone|pore,,true
 437,other,마그네슘설페이트,Magnesium Sulfate,MAGNESIUM SULFATE,,,true
-438,acne_control,베타인살리실레이트,Betaine Salicylate,BETAINE SALICYLATE,acne|bacteria|antimicrobial|inflammation|exfoliation|keratolytic|skin renewal,,true
+438,exfoliation,베타인살리실레이트,Betaine Salicylate,BETAINE SALICYLATE,exfoliation|keratolytic|skin renewal|desquamation|comedolytic|acne|sebum|oiliness|oily skin|pore|pores,,true
 439,barrier_hydration,병풀잎수,Centella Asiatica Leaf Water,CENTELLA ASIATICA LEAF WATER,barrier|hydration|moisturizing|dry skin|skin barrier,,true
 440,other,소듐카보머,Sodium Carbomer,SODIUM CARBOMER,,,true
 441,barrier_hydration,스타아니스추출물,Illicium Verum (Anise) Fruit Extract,ILLICIUM VERUM FRUIT EXTRACT,barrier|hydration|moisturizing|dry skin|skin barrier,,true
-442,anti_aging,아스코빌테트라이소팔미테이트,Ascorbyl Tetraisopalmitate,ASCORBYL TETRAISOPALMITATE,anti-aging|oxidative stress|photoaging|free radical|barrier|hydration|moisturizing|dry skin|skin barrier,,true
+442,brightening,아스코빌테트라이소팔미테이트,Ascorbyl Tetraisopalmitate,ASCORBYL TETRAISOPALMITATE,brightening|hyperpigmentation|melasma|pigmentation|melanin|skin tone|dullness|uneven skin tone|antioxidant|photoaging,,true
 443,barrier_hydration,아티초크잎추출물,Cynara Scolymus (Artichoke) Leaf Extract,CYNARA SCOLYMUS BUD EXTRACT,barrier|hydration|moisturizing|dry skin|skin barrier,,true
 444,barrier_hydration,에스에이치-올리고펩타이드-2,sh-Oligopeptide-2,SH-OLIGOPEPTIDE-2,barrier|hydration|moisturizing|dry skin|skin barrier|skin protection|soothing|irritation,,true
 445,anti_aging,유비퀴논,Ubiquinone,UBIQUINONE,anti-aging|oxidative stress|photoaging|free radical|barrier|hydration|moisturizing|dry skin|skin barrier,,true
@@ -650,7 +650,7 @@ ingredient_code,category,canonical_name,query_name,alias_list,concern_keywords,e
 649,barrier_hydration,더덕뿌리추출물,Codonopsis Lanceolata Root Extract,CODONOPSIS LANCEOLATA ROOT EXTRACT,barrier|hydration|moisturizing|dry skin|skin barrier,,true
 650,barrier_hydration,띠뿌리추출물,Imperata Cylindrica Root Extract,IMPERATA CYLINDRICA ROOT EXTRACT,barrier|hydration|moisturizing|dry skin|skin barrier,,true
 651,hair,락토바실러스/석류발효추출물,Lactobacillus/Punica Granatum Fruit Ferment Extract,LACTOBACILLUS/PUNICA GRANATUM FRUIT FERMENT EXTRACT,hair conditioning|hair repair|hair damage|barrier|hydration|moisturizing|dry skin|skin barrier,,true
-652,acne_control,만델릭애씨드,Mandelic Acid,MANDELIC ACID,acne|bacteria|antimicrobial|inflammation,,true
+652,exfoliation,만델릭애씨드,Mandelic Acid,MANDELIC ACID,exfoliation|keratolytic|skin renewal|desquamation|acne|comedolytic|sebum|oiliness|pore|pores|hyperpigmentation|dullness|uneven skin tone,,true
 653,other,멘톡시프로판다이올,Menthoxypropanediol,MENTHOXYPROPANEDIOL,,,true
 654,barrier_hydration,바오밥나무씨오일,Adansonia Digitata Seed Oil,ADANSONIA DIGITATA SEED EXTRACT,barrier|hydration|moisturizing|dry skin|skin barrier,,true
 655,cleansing,베헤닉애씨드,Behenic Acid,BEHENIC ACID,cleansing|pore|impurity|surfactant|foam,,true
@@ -2649,3 +2649,6 @@ ingredient_code,category,canonical_name,query_name,alias_list,concern_keywords,e
 2648,barrier_hydration,흑효모발효여과물,Aureobasidium Pullulans Ferment Filtrate,AUREOBASIDIUM PULLULANS FERMENT FILTRATE,hydration|moisturizing|TEWL|water retention|barrier|dry skin|skin barrier|skin protection|soothing|irritation,,true
 2649,barrier_hydration,흰서양송로수,Tuber Magnatum Water,TUBER MAGNATUM WATER,barrier|hydration|moisturizing|dry skin|skin barrier,,true
 2650,hair,히노키티올,Hinokitiol,HINOKITIOL,hair conditioning|hair repair|hair damage,,true
+2651,exfoliation,글라이콜릭애씨드,Glycolic Acid,GLYCOLIC ACID,exfoliation|keratolytic|skin renewal|desquamation|texture|roughness|pore|pores|acne|dullness|uneven skin tone|brightening,,true
+2652,exfoliation,락토바이오닉애씨드,Lactobionic Acid,LACTOBIONIC ACID,exfoliation|keratolytic|skin renewal|desquamation|texture|roughness|dullness|uneven skin tone|brightening|hydration,,true
+2653,acne_control,아젤라익애씨드,Azelaic Acid,AZELAIC ACID,sebum|oiliness|oily skin|oil control|acne|pore|pores|comedolytic|keratolytic|hyperpigmentation|melasma|dullness|uneven skin tone,,true
