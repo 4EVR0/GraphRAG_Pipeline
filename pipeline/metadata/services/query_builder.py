@@ -113,9 +113,18 @@ def build_pubmed_query(
     query_name: str,
     alias_list: str | None = None,
     concern_keywords: str | None = None,
+    required_context_keywords: str | None = None,
+    excluded_context_keywords: str | None = None,
 ) -> str:
     ingredient_part = build_ingredient_part(query_name, alias_list)
     context_part = build_context_part(concern_keywords)
     claim_hint_part = build_claim_hint_part(concern_keywords)
 
-    return f"{ingredient_part} AND {context_part} AND {claim_hint_part}"
+    parts = [ingredient_part, context_part, claim_hint_part]
+    required_terms = parse_pipe_list(required_context_keywords)
+    if required_terms:
+        parts.append(build_or_part(required_terms))
+    excluded_terms = parse_pipe_list(excluded_context_keywords)
+    if excluded_terms:
+        parts.append(f"NOT {build_or_part(excluded_terms)}")
+    return " AND ".join(parts)

@@ -782,8 +782,11 @@ def _main_impl(
     print(f"[INFO] Gold batch saved to: {gold_batch_dir}")
 
 
-def main(silver_batch_id: Optional[str] = None) -> None:
-    gold_batch_id = build_batch_id()
+def main(
+    silver_batch_id: Optional[str] = None,
+    gold_batch_id: Optional[str] = None,
+) -> None:
+    gold_batch_id = gold_batch_id or build_batch_id()
     with job_unit(
         logger,
         job="graphrag_gold_claim",
@@ -797,5 +800,9 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--silver-batch-id", default=None)
+    parser.add_argument("--gold-batch-id", default=None)
     args = parser.parse_args()
-    main(silver_batch_id=args.silver_batch_id)
+    main(
+        silver_batch_id=args.silver_batch_id,
+        gold_batch_id=args.gold_batch_id,
+    )

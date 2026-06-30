@@ -13,6 +13,7 @@ class BuildSilverRowsTest(unittest.TestCase):
                 "journal": "Journal",
                 "publication_year": 2026,
                 "source_url": "https://pubmed.ncbi.nlm.nih.gov/123/",
+                "searched_ingredients": "Niacinamide|Zinc PCA",
             }
         ]
 
@@ -27,6 +28,13 @@ class BuildSilverRowsTest(unittest.TestCase):
             for row in chunk_rows
         ])
         self.assertTrue(all(row["batch_id"] == "full_v5" for row in chunk_rows))
+        self.assertEqual(2, paper_rows[0]["searched_ingredient_count"])
+        self.assertTrue(
+            all(
+                row["searched_ingredients"] == "Niacinamide|Zinc PCA"
+                for row in chunk_rows
+            )
+        )
 
 
 if __name__ == "__main__":

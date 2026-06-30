@@ -549,6 +549,9 @@ def load_affects_rows(
             if not effect_code:
                 print(f"[WARN] effect_id={eid} 를 effect_code로 변환할 수 없습니다.")
                 continue
+            # 피지 증가 관찰은 SEBUM_REGULATION 추천 효능으로 노출하지 않는다.
+            if effect_code == "SEBUM_REGULATION" and relation == "increases":
+                continue
             key = (inci_name, effect_code, relation)
             by_paper = support_by_edge.setdefault(key, {})
             by_paper[pmid] = max(by_paper.get(pmid, 0.0), row_weight)
@@ -726,11 +729,18 @@ def main(
     )
 
     # ── inci_name 역방향 lookup (소문자 → inci_name) ─────────────────────
+    valid_ingredient_ids = {
+        str(row["ingredient_id:ID(Ingredient)"])
+        for row in ingredient_rows
+        if row.get("ingredient_id:ID(Ingredient)")
+    }
     inci_lookup: dict[str, str] = {}
     for _, row in inci_df.iterrows():
         if pd.isna(row["inci_name"]):
             continue
         inci_name = str(row["inci_name"])
+        if inci_name not in valid_ingredient_ids:
+            continue
         inci_lookup[inci_name.lower()] = inci_name
         if pd.notna(row.get("eng_name")):
             inci_lookup[str(row["eng_name"]).lower()] = inci_name
@@ -743,7 +753,13 @@ def main(
         "ceramide": "CERAMIDE NP",
         "coenzyme q10": "UBIQUINONE",
     }
-    inci_lookup.update(manual_overrides)
+    inci_lookup.update(
+        {
+            alias: inci_name
+            for alias, inci_name in manual_overrides.items()
+            if inci_name in valid_ingredient_ids
+        }
+    )
 
     # ── effect.csv ───────────────────────────────────────────────────────
     effect_rows = parse_effect_taxonomy()

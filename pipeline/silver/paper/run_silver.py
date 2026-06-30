@@ -1,3 +1,4 @@
+import csv
 import argparse
 from datetime import datetime, timezone
 from typing import Any, Iterable
@@ -39,7 +40,13 @@ def build_silver_rows(
     chunk_rows: list[dict] = []
 
     for paper in papers:
+        if not paper.get("abstract_text"):
+            continue
         abstract = str(paper["abstract_text"]).strip()
+        searched_ingredients = str(paper.get("searched_ingredients") or "")
+        searched_values = [
+            value for value in searched_ingredients.split("|") if value
+        ]
         paper_rows.append(
             SilverPaperRecord(
                 batch_id=batch_id,
@@ -49,8 +56,8 @@ def build_silver_rows(
                 journal=paper.get("journal"),
                 publication_year=paper.get("publication_year"),
                 source_url=paper.get("source_url"),
-                searched_ingredient_count=0,
-                searched_ingredients=None,
+                searched_ingredient_count=len(searched_values),
+                searched_ingredients=searched_ingredients or None,
             ).to_dict()
         )
 
@@ -61,8 +68,7 @@ def build_silver_rows(
                 start = search_from
             end = start + len(sentence)
             search_from = end
-            chunk_rows.append(
-                SilverChunkRecord(
+            chunk_row = SilverChunkRecord(
                     batch_id=batch_id,
                     pmid=str(paper["pmid"]),
                     chunk_index=chunk_index,
@@ -78,7 +84,8 @@ def build_silver_rows(
                     publication_year=paper.get("publication_year"),
                     source_url=paper.get("source_url"),
                 ).to_dict()
-            )
+            chunk_row["searched_ingredients"] = searched_ingredients
+            chunk_rows.append(chunk_row)
 
     return paper_rows, chunk_rows
 
@@ -97,9 +104,28 @@ def fetch_papers() -> list[dict[str, Any]]:
         conn.close()
 
 
-def main(batch_id: str | None = None) -> str:
+def read_bronze_papers(bronze_batch_id: str) -> list[dict[str, Any]]:
+    path = (
+        settings.bronze_pubmed_dir
+        / f"batch={bronze_batch_id}"
+        / "paper_raw.csv"
+    )
+    if not path.exists():
+        raise FileNotFoundError(f"Bronze batch not found: {path}")
+    with path.open(encoding="utf-8-sig", newline="") as file:
+        return list(csv.DictReader(file))
+
+
+def main(
+    batch_id: str | None = None,
+    bronze_batch_id: str | None = None,
+) -> str:
     batch_id = batch_id or build_run_id("graphrag_silver_paper")
-    papers = fetch_papers()
+    papers = (
+        read_bronze_papers(bronze_batch_id)
+        if bronze_batch_id
+        else fetch_papers()
+    )
     paper_rows, chunk_rows = build_silver_rows(papers, batch_id)
 
     batch_dir = settings.silver_paper_dir / f"batch={batch_id}"
@@ -110,7 +136,7 @@ def main(batch_id: str | None = None) -> str:
         batch_dir / "metadata.json",
         build_silver_metadata(
             batch_id=batch_id,
-            bronze_batch_id="postgres_paper_metadata",
+            bronze_batch_id=bronze_batch_id or "postgres_paper_metadata",
             raw_paper_count=len(papers),
             deduped_paper_count=len(paper_rows),
             chunk_count=len(chunk_rows),
@@ -131,5 +157,6 @@ if __name__ == "__main__":
         description="Rebuild the complete Silver corpus from paper_metadata."
     )
     parser.add_argument("--batch-id", default=None)
+    parser.add_argument("--bronze-batch-id", default=None)
     args = parser.parse_args()
-    main(batch_id=args.batch_id)
+    main(batch_id=args.batch_id, bronze_batch_id=args.bronze_batch_id)

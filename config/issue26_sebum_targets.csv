@@ -1,0 +1,11 @@
+ingredient_code,category,canonical_name,query_name,alias_list,concern_keywords,exclude_if_contains,is_target,required_context_keywords,excluded_context_keywords
+1,acne_control,Niacinamide,Niacinamide,Nicotinamide,sebum|oiliness|oily skin|oil control|acne,,true,sebum|sebaceous|oiliness|oily skin|seborrhea,
+2,exfoliation,Salicylic acid,Salicylic Acid,BHA,sebum|oiliness|oily skin|acne|comedolytic,,true,sebum|sebaceous|oiliness|oily skin|seborrhea,
+3,acne_control,Zinc PCA,Zinc PCA,,sebum|oiliness|oily skin|acne,,true,sebum|sebaceous|oiliness|oily skin|seborrhea,
+4,acne_control,Zinc Gluconate,Zinc Gluconate,,sebum|oiliness|oily skin|acne,,true,sebum|sebaceous|oiliness|oily skin|seborrhea,
+5,acne_control,Azelaic acid,Azelaic Acid,,sebum|oiliness|oily skin|acne|comedolytic,,true,sebum|sebaceous|oiliness|oily skin|seborrhea,
+6,acne_control,Carnitine,L-Carnitine,Carnitine|Levocarnitine,sebum|oiliness|oily skin|acne,,true,sebum|sebaceous|oiliness|oily skin|seborrhea,
+7,acne_control,Green tea extract,Green Tea,EGCG|Epigallocatechin Gallate|Camellia Sinensis,sebum|oiliness|oily skin|acne,,true,sebum|sebaceous|oiliness|oily skin|seborrhea,
+8,pore_control,Witch hazel extract,Witch Hazel,Hamamelis|Hamamelis Virginiana,sebum|oiliness|oily skin|astringent,,true,sebum|sebaceous|oiliness|oily skin|seborrhea,
+9,acne_control,Kaolin,Kaolin,,sebum|oiliness|oily skin|acne,,true,sebum|sebaceous|oiliness|oily skin|seborrhea,
+10,exfoliation,Mandelic acid,Mandelic Acid,,sebum|oiliness|oily skin|acne|keratolytic,,true,sebum|sebaceous|oiliness|oily skin|seborrhea,
