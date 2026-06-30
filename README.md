@@ -185,6 +185,23 @@ python -m pipeline.gold.claim.run_gold
 - 정책 엔진으로 `strict_graph` / `soft_graph` / `recommendation_only` / `evidence_only` 분류
 - 출력: `gold/claim/batch=<id>/` 하위 CSV 파일들
 
+### 전체 corpus Gold 재생성
+
+PostgreSQL `paper_metadata`가 원본 corpus인 경우 Silver부터 재구성하고 Neo4j CSV를
+빌드합니다. LLM 응답은
+`gold/cache/llm_claims.sqlite3`에 캐시되어 실패 후 재실행 시 재사용됩니다.
+
+```bash
+python -m pipeline.silver.paper.run_silver --batch-id <silver-batch-id>
+GOLD_TEST_CHUNK_LIMIT=0 python -m pipeline.gold.claim.run_gold \
+  --silver-batch-id <silver-batch-id>
+python scripts/build_gold_csvs.py --no-upload
+```
+
+builder는 로컬 Gold evidence를 현재 eligibility 정책으로 재평가하고, 기존 운영
+graph에서 유효한 node/edge만 보존해 회귀와 dangling edge를 함께 방지합니다.
+단일 Gold 배치만 격리 검증할 때는 `--claim-batch-id <gold-batch-id>`를 사용합니다.
+
 ---
 
 ## Gold 정책 (Eligibility Tier)
@@ -192,8 +209,8 @@ python -m pipeline.gold.claim.run_gold
 | Tier | 설명 | Graph RAG 활용 |
 |------|------|----------------|
 | `strict_graph` | 단일 성분 · moderate/strong 근거 · 리스트 패턴 없음 | 그래프 엣지 (고신뢰) |
-| `soft_graph` | 단일 제형/post-procedure 맥락 · moderate/strong | 그래프 엣지 (중신뢰) |
-| `recommendation_only` | 복합 성분 · 병용 시술 · weak 근거 · 리뷰 논문 | 추천 보조 |
+| `soft_graph` | moderate/strong 복합 성분·제형·리뷰 근거 | 그래프 엣지 (중신뢰) |
+| `recommendation_only` | 병용 시술 · weak 근거 | 추천 보조 |
 | `evidence_only` | 비유의 · 매핑 실패 · 비코스메틱 타겟 | 제외 |
 
 **Attribution 분류 기준**

@@ -385,6 +385,19 @@ class ClaimExtractor:
         self.allowed_canonical_ingredients = set(self.ingredient_rules.keys())
         self.alias_to_canonical = self._build_alias_to_canonical_map()
         self.sorted_aliases = sorted(self.alias_to_canonical.keys(), key=len, reverse=True)
+        self._alias_priority = {
+            alias: priority for priority, alias in enumerate(self.sorted_aliases)
+        }
+        alias_alternation = "|".join(re.escape(alias) for alias in self.sorted_aliases)
+        allowed_prefixes = "|".join(ALLOWED_PREFIX_PATTERNS)
+        self._any_alias_pattern = re.compile(
+            rf"\b(?P<alias>{alias_alternation})\b",
+            re.IGNORECASE,
+        )
+        self._front_alias_pattern = re.compile(
+            rf"^(?:(?:{allowed_prefixes}))?(?P<alias>{alias_alternation})\b",
+            re.IGNORECASE,
+        )
 
     def _split_pipe_field(self, value: str) -> List[str]:
         if not value:
@@ -614,29 +627,21 @@ class ClaimExtractor:
 
     def _extract_front_subject_alias(self, text: str) -> Optional[Tuple[str, str]]:
         normalized = self._normalize_sentence_for_subject_check(text)
-        lower = normalized.lower()
-
-        for alias in self.sorted_aliases:
-            direct_pattern = r"^" + re.escape(alias) + r"\b"
-            if re.match(direct_pattern, lower):
-                return alias, self.alias_to_canonical[alias]
-
-            for prefix in ALLOWED_PREFIX_PATTERNS:
-                prefixed_pattern = r"^" + prefix + re.escape(alias) + r"\b"
-                if re.match(prefixed_pattern, lower):
-                    return alias, self.alias_to_canonical[alias]
-
-        return None
+        matched = self._front_alias_pattern.match(normalized)
+        if not matched:
+            return None
+        alias = matched.group("alias").lower()
+        return alias, self.alias_to_canonical[alias]
 
     def _extract_any_alias(self, text: str) -> Optional[Tuple[str, str]]:
-        lower = text.lower()
-
-        for alias in self.sorted_aliases:
-            pattern = r"\b" + re.escape(alias) + r"\b"
-            if re.search(pattern, lower):
-                return alias, self.alias_to_canonical[alias]
-
-        return None
+        matched_aliases = {
+            matched.group("alias").lower()
+            for matched in self._any_alias_pattern.finditer(text)
+        }
+        if not matched_aliases:
+            return None
+        alias = min(matched_aliases, key=self._alias_priority.__getitem__)
+        return alias, self.alias_to_canonical[alias]
 
     def _has_multi_ingredient_enumeration(self, text: str) -> bool:
         lower = text.lower()
@@ -653,11 +658,10 @@ class ClaimExtractor:
         if not any(phrase in lower for phrase in trigger_phrases):
             return False
 
-        matched_aliases = []
-        for alias in self.sorted_aliases:
-            if re.search(r"\b" + re.escape(alias) + r"\b", lower):
-                matched_aliases.append(alias)
-
+        matched_aliases = {
+            matched.group("alias").lower()
+            for matched in self._any_alias_pattern.finditer(lower)
+        }
         canonicals = {self.alias_to_canonical[a] for a in matched_aliases}
         return len(canonicals) >= 2
 
