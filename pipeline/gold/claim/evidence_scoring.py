@@ -707,6 +707,23 @@ def is_generalized_review_style(sentence: str, title: str, study_context: str) -
     )
 
 
+def is_hair_or_scalp_context(sentence: str, title: str) -> bool:
+    """얼굴 피부 효능으로 직접 전용할 수 없는 명시적 두피·모발 문맥을 찾는다."""
+    text = f"{title} {sentence}".lower()
+    return any(
+        marker in text
+        for marker in (
+            "scalp",
+            "hair growth",
+            "hair loss",
+            "hair follicle",
+            "hair care",
+            "hair tonic",
+            "dandruff",
+        )
+    )
+
+
 def compute_eligibility_tier(
     strength_label: str,
     significance_label: str,
@@ -749,6 +766,13 @@ def compute_eligibility_tier(
         return "evidence_only"
     if not has_map:
         return "evidence_only"
+
+    # 경구 복용 근거를 국소 화장품 성분 효능으로 직접 귀속하지 않는다.
+    if study_context == "human_oral":
+        return "recommendation_only"
+
+    if is_hair_or_scalp_context(sentence, title):
+        return "recommendation_only"
 
     # ── 시술 교란: 국소 성분에 효과를 귀속할 수 없음 → 추천 랭킹용으로만 ──
     if attribution_label in ("procedure_adjunct_combination", "procedure_combination"):

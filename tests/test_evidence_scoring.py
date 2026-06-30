@@ -149,6 +149,28 @@ class EvidenceScoringTierTest(unittest.TestCase):
                 detected_labels=["Retinol"],
             ),
         )
+        # 경구 복용 연구는 국소 화장품 graph edge로 사용하지 않음
+        self.assertEqual(
+            "recommendation_only",
+            compute_eligibility_tier(
+                "strong", "significant", "single_active", "efficacy",
+                [404], [],
+                sentence="Oral nicotinamide reduced sebum in acne.",
+                detected_labels=["Niacinamide"],
+                study_context="human_oral",
+            ),
+        )
+        # 두피·모발 연구를 얼굴 피부 효능 graph edge로 전용하지 않음
+        self.assertEqual(
+            "recommendation_only",
+            compute_eligibility_tier(
+                "strong", "significant", "single_active", "efficacy",
+                [405], [],
+                sentence="The treatment reduced scalp sebum.",
+                detected_labels=["Niacinamide"],
+                study_context="human_topical",
+            ),
+        )
 
 
 class EvidenceAggregationTest(unittest.TestCase):

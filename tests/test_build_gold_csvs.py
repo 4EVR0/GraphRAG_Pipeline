@@ -116,6 +116,44 @@ class ClaimBatchSelectionTest(unittest.TestCase):
             {row[":START_ID(Ingredient)"] for row in edges},
         )
 
+    def test_sebum_increase_is_not_emitted_as_an_affects_edge(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            batch = root / "batch=sebum"
+            batch.mkdir()
+            row = {
+                "ingredient_name": "Niacinamide",
+                "relation": "increases",
+                "effect_ids": "6",
+                "concern_ids": "",
+                "eligibility_tier": "strict_graph",
+                "strength_label": "strong",
+                "significance_label": "significant",
+                "attribution_label": "single_active",
+                "claim_type": "efficacy",
+                "source_sentence": "Niacinamide increased sebum.",
+                "title": "",
+                "study_context": "human_topical",
+                "all_detected_ingredients": "Niacinamide",
+                "pmid": "300",
+                "row_weight": "0.5",
+            }
+            with (batch / "gold_claim_all.csv").open(
+                "w", encoding="utf-8", newline=""
+            ) as f:
+                writer = csv.DictWriter(f, fieldnames=list(row))
+                writer.writeheader()
+                writer.writerow(row)
+
+            with patch.object(build_gold_csvs, "CLAIM_BATCH_ROOT", root):
+                edges = build_gold_csvs.load_affects_rows(
+                    {6: "SEBUM_REGULATION"},
+                    {"niacinamide": "NIACINAMIDE"},
+                    claim_batch_id="sebum",
+                )
+
+            self.assertEqual([], edges)
+
 
 if __name__ == "__main__":
     unittest.main()
