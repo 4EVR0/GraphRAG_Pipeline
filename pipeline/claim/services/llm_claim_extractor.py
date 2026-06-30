@@ -1,5 +1,8 @@
+import hashlib
 import json
 import os
+import sqlite3
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
@@ -156,6 +159,7 @@ class LLMClaimExtractor:
         api_key: Optional[str] = None,
         temperature: float = 0.0,
         max_completion_tokens: int = 1200,
+        cache_path: Optional[str] = None,
     ) -> None:
         self.model = model or os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
         self.temperature = temperature
@@ -166,6 +170,24 @@ class LLMClaimExtractor:
             raise RuntimeError("OPENAI_API_KEY is not set.")
 
         self.client = OpenAI(api_key=resolved_api_key)
+        resolved_cache_path = cache_path or os.getenv(
+            "LLM_CACHE_PATH",
+            "gold/cache/llm_claims.sqlite3",
+        )
+        self.cache_path = Path(resolved_cache_path)
+        self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+        self.cache = sqlite3.connect(self.cache_path)
+        self.cache.execute(
+            """
+            CREATE TABLE IF NOT EXISTS llm_response_cache (
+                cache_key TEXT PRIMARY KEY,
+                model TEXT NOT NULL,
+                response TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        self.cache.commit()
 
     def extract(
         self,
@@ -244,6 +266,21 @@ Return JSON only.
         ingredient_candidates: List[str],
     ) -> str:
         user_prompt = self._build_user_prompt(sentence, ingredient_candidates)
+        cache_payload = "\n".join(
+            [
+                self.model,
+                SYSTEM_PROMPT,
+                json.dumps(CLAIMS_JSON_SCHEMA, sort_keys=True),
+                user_prompt,
+            ]
+        )
+        cache_key = hashlib.sha256(cache_payload.encode("utf-8")).hexdigest()
+        cached = self.cache.execute(
+            "SELECT response FROM llm_response_cache WHERE cache_key = ?",
+            (cache_key,),
+        ).fetchone()
+        if cached:
+            return str(cached[0])
 
         response = self.client.chat.completions.create(
             model=self.model,
@@ -261,7 +298,15 @@ Return JSON only.
 
         content = response.choices[0].message.content
         if not content:
-            return '{"claims": []}'
+            content = '{"claims": []}'
+        self.cache.execute(
+            """
+            INSERT OR REPLACE INTO llm_response_cache (cache_key, model, response)
+            VALUES (?, ?, ?)
+            """,
+            (cache_key, self.model, content),
+        )
+        self.cache.commit()
         return content
 
     def _parse_payload(self, raw_payload: str) -> List[Dict[str, Any]]:

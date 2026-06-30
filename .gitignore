@@ -21,12 +21,10 @@ mvenv/
 .ipynb_checkpoints
 
 # data outputs
-data/
-bronze/
-silver/
-gold/
-!pipeline/gold/
-!pipeline/gold/**
+/data/
+/bronze/
+/silver/
+/gold/
 pipeline/gold/**/__pycache__/
 *.csv
 !config/target_ingredients.csv

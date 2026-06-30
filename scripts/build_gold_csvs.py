@@ -21,6 +21,7 @@ import argparse
 import csv
 import datetime
 import io
+import math
 import re
 import sys
 from pathlib import Path
@@ -28,8 +29,13 @@ from pathlib import Path
 import boto3
 import pandas as pd
 import pyarrow.parquet as pq
+from botocore.exceptions import ClientError
 
 ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(ROOT))
+
+from pipeline.gold.claim.evidence_scoring import compute_eligibility_tier
+
 GOLD_NODES = ROOT / "gold" / "nodes"
 GOLD_EDGES = ROOT / "gold" / "edges"
 SEED_DIR = ROOT / "db" / "seed"
@@ -100,6 +106,34 @@ def load_inci_csv_from_s3(bucket: str) -> pd.DataFrame:
     df = df.sort_values("ingredient_code", ascending=False).drop_duplicates("inci_name")
     print(f"[S3] INCI 고유 inci_name={len(df)}개")
     return df
+
+
+def load_existing_graph_csv(bucket: str, relative_key: str) -> pd.DataFrame:
+    """최신 운영 graph batch의 CSV 하나를 로드합니다."""
+    s3 = _s3_client()
+    response = s3.list_objects_v2(
+        Bucket=bucket,
+        Prefix=S3_GOLD_PREFIX,
+        Delimiter="/",
+    )
+    prefixes = sorted(
+        item["Prefix"]
+        for item in response.get("CommonPrefixes", [])
+        if "/batch_job=" in item["Prefix"]
+    )
+    if not prefixes:
+        return pd.DataFrame()
+
+    key = f"{prefixes[-1]}{relative_key}"
+    buffer = io.BytesIO()
+    try:
+        s3.download_fileobj(bucket, key, buffer)
+    except ClientError:
+        return pd.DataFrame()
+    buffer.seek(0)
+    legacy = pd.read_csv(buffer, encoding="utf-8-sig")
+    print(f"[S3] 기존 graph CSV: {key} ({len(legacy)}행)")
+    return legacy
 
 
 # ---------------------------------------------------------------------------
@@ -344,7 +378,15 @@ def build_cosing_soft_edges(
     seen: set[tuple] = set()
     skipped_pubmed = 0
 
-    for inci_name, funcs_raw in inci_func_map.items():
+    product_ingredients = {
+        str(value)
+        for value in prod_df["inci_name"].dropna().tolist()
+        if str(value)
+    }
+    for inci_name in sorted(product_ingredients):
+        funcs_raw = inci_func_map.get(inci_name)
+        if not funcs_raw or pd.isna(funcs_raw):
+            continue
         funcs = [_normalize_func(f.strip().upper()) for f in str(funcs_raw).split(";") if f.strip()]
         for func in funcs:
             mapping = _COSING_FUNC_TO_EFFECTS.get(func)
@@ -381,8 +423,20 @@ def build_cosing_soft_edges(
 # Gold claim 데이터 로드
 # ---------------------------------------------------------------------------
 
-def _all_claim_batches(since: str | None = None) -> list[Path]:
+def _all_claim_batches(
+    since: str | None = None,
+    claim_batch_id: str | None = None,
+) -> list[Path]:
     """since: 'YYYY-MM-DD' 형식. 해당 날짜 이후 배치만 반환."""
+    if since and claim_batch_id:
+        raise ValueError("--since and --claim-batch-id cannot be used together.")
+    if claim_batch_id:
+        batch = CLAIM_BATCH_ROOT / f"batch={claim_batch_id}"
+        if not batch.is_dir():
+            sys.exit(f"[ERROR] Gold claim batch not found: {batch}")
+        print(f"[filter] claim batch: {claim_batch_id}")
+        return [batch]
+
     batches = sorted(CLAIM_BATCH_ROOT.glob("batch=*"))
     if not batches:
         sys.exit(f"[ERROR] {CLAIM_BATCH_ROOT} 에 batch 디렉토리가 없습니다.")
@@ -395,53 +449,93 @@ def _all_claim_batches(since: str | None = None) -> list[Path]:
     return batches
 
 
-def load_affects_rows(effect_id_to_code: dict[int, str], inci_lookup: dict[str, str], since: str | None = None) -> list[dict]:
-    """
-    gold_canonical_claim (전체 배치 집계) + claim_effect_map → affects 엣지 행 목록.
-
-    inci_lookup: ingredient_name(소문자) → inci_name
-    """
-    all_batches = _all_claim_batches(since=since)
-    canon_frames = []
+def load_affects_rows(
+    effect_id_to_code: dict[int, str],
+    inci_lookup: dict[str, str],
+    since: str | None = None,
+    claim_batch_id: str | None = None,
+) -> list[dict]:
+    """Graph-eligible evidence를 ingredient/effect/relation 단위로 집계합니다."""
+    all_batches = _all_claim_batches(
+        since=since,
+        claim_batch_id=claim_batch_id,
+    )
+    evidence_frames = []
     for batch_dir in all_batches:
-        f = batch_dir / "gold_canonical_claim.csv"
+        f = batch_dir / "gold_claim_all.csv"
         if f.exists() and f.stat().st_size > 5:
             try:
                 df = pd.read_csv(f, encoding="utf-8-sig")
                 if len(df) > 0:
-                    canon_frames.append(df)
+                    evidence_frames.append(df)
             except Exception:
                 pass
-    if not canon_frames:
-        sys.exit("[ERROR] gold_canonical_claim.csv 데이터가 없습니다.")
-    claims = pd.concat(canon_frames, ignore_index=True)
+    if not evidence_frames:
+        sys.exit("[ERROR] gold_claim_all.csv 데이터가 없습니다.")
+    evidence = pd.concat(evidence_frames, ignore_index=True)
 
     # 성분명이 아닌 값 제거 (제형명·일반명 오검출)
-    _NON_INGREDIENT = {"cream", "water", "lotion", "serum", "gel", "foam", "oil", "emulsion"}
-    before = len(claims)
-    claims = claims[~claims["ingredient_name"].str.lower().isin(_NON_INGREDIENT)]
-    if len(claims) < before:
-        print(f"[filter] 비성분 제거: {before - len(claims)}개")
+    non_ingredient_names = {
+        "cream", "water", "lotion", "serum", "gel", "foam", "oil", "emulsion",
+        "크림", "빙하수", "멜라닌",
+    }
+    evidence = evidence[
+        ~evidence["ingredient_name"].str.lower().isin(non_ingredient_names)
+    ].copy()
 
-    print(f"[claim] 전체 배치={len(all_batches)}, canonical={len(claims)}, graph_eligible={claims['is_graph_eligible'].sum()}")
+    def pipe_values(value: object) -> list[str]:
+        if value is None or pd.isna(value):
+            return []
+        return [
+            part.strip()
+            for part in str(value).split("|")
+            if part.strip() and part.strip().lower() != "nan"
+        ]
 
-    eligible = claims[claims["is_graph_eligible"] == True].copy()
+    def current_tier(row: pd.Series) -> str:
+        return compute_eligibility_tier(
+            str(row.get("strength_label", "")),
+            str(row.get("significance_label", "")),
+            str(row.get("attribution_label", "")),
+            str(row.get("claim_type", "")),
+            [int(float(value)) for value in pipe_values(row.get("effect_ids"))],
+            [int(float(value)) for value in pipe_values(row.get("concern_ids"))],
+            sentence=str(row.get("source_sentence", "")),
+            title=str(row.get("title", "")),
+            study_context=str(row.get("study_context", "")),
+            detected_labels=pipe_values(row.get("all_detected_ingredients")),
+        )
 
-    rows: list[dict] = []
+    evidence["current_eligibility_tier"] = evidence.apply(current_tier, axis=1)
+    eligible = evidence[
+        evidence["current_eligibility_tier"].isin(["strict_graph", "soft_graph"])
+    ].copy()
+    print(
+        f"[claim] 전체 배치={len(all_batches)}, evidence={len(evidence)}, "
+        f"graph_eligible={len(eligible)}"
+    )
+
+    # canonical claim 수준의 effect union을 사용하면 한 논문의 부차 effect가
+    # 같은 target을 공유하는 모든 논문의 누적 점수를 받는다. Evidence 행의
+    # 실제 effect_ids로 그룹화해 effect 간 점수 누수를 막는다.
+    support_by_edge: dict[tuple[str, str, str], dict[str, float]] = {}
     unmapped_ingredients: set[str] = set()
+    excluded_inci = {"CREAM", "WATER", "MELANIN"}
 
     for _, claim in eligible.iterrows():
-        ingredient_name: str = claim["ingredient_name"]
-        relation: str = claim["relation"]
-        effect_ids_raw = str(claim["primary_effect_ids"])
+        ingredient_name = str(claim["ingredient_name"])
+        relation = str(claim["relation"])
+        effect_ids_raw = str(claim.get("effect_ids", ""))
 
         inci_name = inci_lookup.get(ingredient_name.lower())
         if not inci_name:
             unmapped_ingredients.add(ingredient_name)
             continue
+        if inci_name.upper() in excluded_inci:
+            continue
 
-        graph_score   = float(claim.get("graph_score", 0.0) or 0.0)
-        paper_count   = int(float(claim.get("paper_count_distinct", 1) or 1))
+        pmid = str(claim["pmid"])
+        row_weight = float(claim.get("row_weight", 0.0) or 0.0)
 
         for eid_str in effect_ids_raw.split("|"):
             eid_str = eid_str.strip()
@@ -455,28 +549,34 @@ def load_affects_rows(effect_id_to_code: dict[int, str], inci_lookup: dict[str, 
             if not effect_code:
                 print(f"[WARN] effect_id={eid} 를 effect_code로 변환할 수 없습니다.")
                 continue
-            rows.append({
-                ":START_ID(Ingredient)": inci_name,
-                ":END_ID(Effect)":       effect_code,
-                "type":                  relation,
-                "evidence_type":         "pubmed_evidence",
-                "graph_score:float":     round(graph_score, 6),
-                "paper_count:int":       paper_count,
-            })
+            key = (inci_name, effect_code, relation)
+            by_paper = support_by_edge.setdefault(key, {})
+            by_paper[pmid] = max(by_paper.get(pmid, 0.0), row_weight)
 
     if unmapped_ingredients:
         print(f"[WARN] INCI 매핑 실패 ingredient: {sorted(unmapped_ingredients)}")
 
-    # 같은 (ingredient, effect, type) 중 graph_score 최고값만 유지
-    best: dict[tuple, dict] = {}
-    for r in rows:
-        key = (r[":START_ID(Ingredient)"], r[":END_ID(Effect)"], r["type"])
-        if key not in best or r["graph_score:float"] > best[key]["graph_score:float"]:
-            best[key] = r
-    deduped = list(best.values())
+    rows = [
+        {
+            ":START_ID(Ingredient)": ingredient,
+            ":END_ID(Effect)": effect,
+            "type": relation,
+            "evidence_type": "pubmed_evidence",
+            "graph_score:float": round(math.log1p(sum(by_paper.values())), 6),
+            "paper_count:int": len(by_paper),
+        }
+        for (ingredient, effect, relation), by_paper in support_by_edge.items()
+    ]
+    rows.sort(
+        key=lambda row: (
+            row[":START_ID(Ingredient)"],
+            row[":END_ID(Effect)"],
+            row["type"],
+        )
+    )
 
-    print(f"[pubmed] 엣지 {len(deduped)}개 생성 (dedup 후)")
-    return deduped
+    print(f"[pubmed] 엣지 {len(rows)}개 생성 (evidence/effect 집계 후)")
+    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -526,15 +626,26 @@ def write_csv(path: Path, fieldnames: list[str], rows: list[dict]) -> None:
 # 메인
 # ---------------------------------------------------------------------------
 
-def main(bucket: str, target_only: bool = False, since: str | None = None, no_upload: bool = False) -> None:
+def main(
+    bucket: str,
+    target_only: bool = False,
+    since: str | None = None,
+    no_upload: bool = False,
+    claim_batch_id: str | None = None,
+    refresh_targets: bool = False,
+) -> None:
     print("=" * 60)
     print("Gold CSV 빌드 시작")
     print(f"  S3 bucket : {bucket}")
     print(f"  출력 경로  : gold/nodes/, gold/edges/")
     if target_only:
         print("  모드: target_ingredients.csv 만 생성")
+    elif refresh_targets:
+        print("  target_ingredients.csv: 갱신")
     if no_upload:
         print("  S3 업로드: 건너뜀 (--no-upload)")
+    if claim_batch_id:
+        print(f"  Gold claim batch: {claim_batch_id}")
     print("=" * 60)
 
     # ── S3에서 원본 데이터 로드 ──────────────────────────────────────────
@@ -542,12 +653,19 @@ def main(bucket: str, target_only: bool = False, since: str | None = None, no_up
     inci_df = load_inci_csv_from_s3(bucket)
 
     # ── target_ingredients.csv (파이프라인 입력) ──────────────────────────
-    target_rows = build_target_ingredients(prod_df, inci_df)
-    target_fieldnames = [
-        "ingredient_code", "category", "canonical_name", "query_name",
-        "alias_list", "concern_keywords", "exclude_if_contains", "is_target",
-    ]
-    write_csv(ROOT / "config" / "target_ingredients.csv", target_fieldnames, target_rows)
+    if target_only or refresh_targets:
+        target_rows = build_target_ingredients(prod_df, inci_df)
+        target_fieldnames = [
+            "ingredient_code", "category", "canonical_name", "query_name",
+            "alias_list", "concern_keywords", "exclude_if_contains", "is_target",
+        ]
+        write_csv(
+            ROOT / "config" / "target_ingredients.csv",
+            target_fieldnames,
+            target_rows,
+        )
+    else:
+        print("[target] 기존 config/target_ingredients.csv 유지")
 
     if target_only:
         print()
@@ -574,7 +692,33 @@ def main(bucket: str, target_only: bool = False, since: str | None = None, no_up
             "cosing_functions:string[]": row["cosing_final"] if pd.notna(row["cosing_final"]) else "",
         }
         for _, row in merged.iterrows()
+        if pd.notna(row["inci_name"]) and str(row["inci_name"]).strip()
     ]
+    legacy_ingredients = load_existing_graph_csv(
+        bucket,
+        "nodes/ingredient.csv",
+    )
+    if not legacy_ingredients.empty:
+        ingredient_frame = pd.concat(
+            [pd.DataFrame(ingredient_rows), legacy_ingredients],
+            ignore_index=True,
+        )
+        ingredient_frame = ingredient_frame[
+            ingredient_frame["ingredient_id:ID(Ingredient)"].notna()
+            & (
+                ingredient_frame["ingredient_id:ID(Ingredient)"]
+                .astype(str)
+                .str.strip()
+                .ne("")
+            )
+        ]
+        ingredient_rows = (
+            ingredient_frame
+            .drop_duplicates("ingredient_id:ID(Ingredient)", keep="first")
+            .fillna("")
+            .to_dict("records")
+        )
+        print(f"[ingredient] 최신 상품 + 기존 graph union: {len(ingredient_rows)}개")
     write_csv(
         GOLD_NODES / "ingredient.csv",
         ["ingredient_id:ID(Ingredient)", "inci_name", "kor_name", "cosing_functions:string[]"],
@@ -627,7 +771,10 @@ def main(bucket: str, target_only: bool = False, since: str | None = None, no_up
 
     # ── affects.csv ──────────────────────────────────────────────────────
     effect_id_to_code: dict[int, str] = {}
-    for batch_dir in _all_claim_batches(since=since):
+    for batch_dir in _all_claim_batches(
+        since=since,
+        claim_batch_id=claim_batch_id,
+    ):
         em_path = batch_dir / "claim_effect_map.csv"
         if em_path.exists() and em_path.stat().st_size > 5:
             try:
@@ -638,7 +785,12 @@ def main(bucket: str, target_only: bool = False, since: str | None = None, no_up
             except Exception:
                 pass
 
-    pubmed_rows = load_affects_rows(effect_id_to_code, inci_lookup, since=since)
+    pubmed_rows = load_affects_rows(
+        effect_id_to_code,
+        inci_lookup,
+        since=since,
+        claim_batch_id=claim_batch_id,
+    )
 
     # ── COSING soft 엣지 (pubmed 엣지가 없는 성분·효과 쌍 보완) ──────────
     valid_effects = {r["effect_code"] for r in effect_rows}
@@ -649,7 +801,47 @@ def main(bucket: str, target_only: bool = False, since: str | None = None, no_up
     soft_rows = build_cosing_soft_edges(prod_df, inci_df, pubmed_seen, valid_effects)
 
     affects_rows = pubmed_rows + soft_rows
-    print(f"[affects] 합계: pubmed {len(pubmed_rows)}개 + cosing {len(soft_rows)}개 = {len(affects_rows)}개")
+    legacy_affects = load_existing_graph_csv(bucket, "edges/affects.csv")
+    if not legacy_affects.empty:
+        valid_ingredient_ids = {
+            str(row["ingredient_id:ID(Ingredient)"])
+            for row in ingredient_rows
+        }
+        legacy_rows = [
+            row
+            for row in legacy_affects.to_dict("records")
+            if str(row.get(":START_ID(Ingredient)", "")) in valid_ingredient_ids
+            and str(row.get(":END_ID(Effect)", "")) in valid_effects
+        ]
+        current_keys = {
+            (
+                row[":START_ID(Ingredient)"],
+                row[":END_ID(Effect)"],
+                row["type"],
+            )
+            for row in affects_rows
+        }
+        retained_legacy = [
+            row
+            for row in legacy_rows
+            if (
+                row[":START_ID(Ingredient)"],
+                row[":END_ID(Effect)"],
+                row["type"],
+            )
+            not in current_keys
+        ]
+        affects_rows = retained_legacy + affects_rows
+        print(
+            f"[affects] 기존 운영 유효 edge 보존: {len(retained_legacy)}개 "
+            f"(dangling/새 edge 중복 제외)"
+        )
+    print(
+        f"[affects] 합계: 신규 pubmed {len(pubmed_rows)}개 + "
+        f"신규 cosing {len(soft_rows)}개 + 보존 legacy "
+        f"{len(affects_rows) - len(pubmed_rows) - len(soft_rows)}개 "
+        f"= {len(affects_rows)}개"
+    )
     write_csv(
         GOLD_EDGES / "affects.csv",
         [":START_ID(Ingredient)", ":END_ID(Effect)", "type",
@@ -697,9 +889,20 @@ if __name__ == "__main__":
     parser.add_argument("--bucket", default=S3_BUCKET, help="S3 버킷명")
     parser.add_argument("--target-only", action="store_true",
                         help="target_ingredients.csv 만 생성하고 종료")
+    parser.add_argument("--refresh-targets", action="store_true",
+                        help="Graph CSV 빌드와 함께 target_ingredients.csv 갱신")
     parser.add_argument("--since", default=None,
                         help="이 날짜(YYYY-MM-DD) 이후 gold 배치만 사용. 예: --since 2026-05-10")
+    parser.add_argument("--claim-batch-id", default=None,
+                        help="정확히 하나의 Gold claim 배치만 사용")
     parser.add_argument("--no-upload", action="store_true",
                         help="S3 업로드를 건너뜀 (로컬 CSV만 생성)")
     args = parser.parse_args()
-    main(args.bucket, target_only=args.target_only, since=args.since, no_upload=args.no_upload)
+    main(
+        args.bucket,
+        target_only=args.target_only,
+        since=args.since,
+        no_upload=args.no_upload,
+        claim_batch_id=args.claim_batch_id,
+        refresh_targets=args.refresh_targets,
+    )

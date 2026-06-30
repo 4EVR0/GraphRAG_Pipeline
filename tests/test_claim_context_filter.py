@@ -58,6 +58,17 @@ class SebumContextFilterTest(unittest.TestCase):
         self.assertTrue(is_claim_candidate_sentence(sentence))
         self.assertEqual([], self.extractor.extract_ingredient_names(sentence))
 
+    def test_multiple_mentions_preserve_longest_alias_priority(self) -> None:
+        sentence = (
+            "Skin hydration improved with water, while tranexamic acid "
+            "reduced pigmentation."
+        )
+
+        self.assertEqual(
+            ["Tranexamic acid"],
+            self.extractor.extract_ingredient_names(sentence),
+        )
+
 
 class EffectTaxonomyMappingTest(unittest.TestCase):
     @classmethod
