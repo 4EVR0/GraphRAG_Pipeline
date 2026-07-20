@@ -1,0 +1,7 @@
+ingredient_code,category,canonical_name,query_name,alias_list,concern_keywords,exclude_if_contains,is_target,required_context_keywords,excluded_context_keywords
+1,adverse,Retinol,Retinol,RETINOL|Vitamin A,irritation|erythema|sensitive skin|stinging|rosacea,,true,irritation|erythema|sensitive skin|stinging|burning|tolerability|contact dermatitis|dermatitis|retinoid dermatitis|rosacea|adverse,
+2,adverse,Retinaldehyde,Retinaldehyde,RETINAL|Retinaldehyde,irritation|erythema|sensitive skin|stinging,,true,irritation|erythema|sensitive skin|stinging|burning|tolerability|contact dermatitis|dermatitis|adverse,
+3,adverse,Glycolic Acid,Glycolic Acid,GLYCOLIC ACID|AHA,irritation|erythema|sensitive skin|stinging,,true,irritation|erythema|sensitive skin|stinging|burning|tolerability|contact dermatitis|dermatitis|adverse,
+4,adverse,Lactic Acid,Lactic Acid,LACTIC ACID|AHA,irritation|erythema|sensitive skin|stinging,,true,irritation|erythema|sensitive skin|stinging|burning|tolerability|contact dermatitis|dermatitis|adverse,
+5,adverse,Salicylic Acid,Salicylic Acid,SALICYLIC ACID|BHA,irritation|erythema|sensitive skin|stinging,,true,irritation|erythema|sensitive skin|stinging|burning|tolerability|contact dermatitis|dermatitis|adverse,
+6,adverse,Mandelic Acid,Mandelic Acid,MANDELIC ACID|AHA,irritation|erythema|sensitive skin|stinging,,true,irritation|erythema|sensitive skin|stinging|burning|tolerability|contact dermatitis|dermatitis|adverse,

@@ -28,6 +28,7 @@ mvenv/
 pipeline/gold/**/__pycache__/
 *.csv
 !config/target_ingredients.csv
+!config/adverse_targets.csv
 
 graph_goldlayer_design.md
 graph_goldlayer_design_v2.txt
