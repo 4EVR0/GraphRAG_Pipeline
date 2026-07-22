@@ -25,8 +25,24 @@ import boto3
 from neo4j import GraphDatabase
 
 BUCKET = "oliveyoung-crawl-data"
-DEFAULT_KEY = "data_csv/oliveyoung_silver_current_oliveyoung_silver_20260606_093114.csv"
 _GOODS_RE = re.compile(r"goodsNo=([A-Za-z0-9]+)")
+
+
+def resolve_latest_key(s3) -> str:
+    """data_csv/의 silver_current 스냅샷 중 가장 최근(LastModified) 것을 자동 선택.
+    특정 날짜 하드코딩은 오래된 데이터를 쓰는 실수를 부르므로 항상 최신을 집는다."""
+    objs = []
+    paginator = s3.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=BUCKET, Prefix="data_csv/"):
+        for o in page.get("Contents", []):
+            k = o["Key"]
+            if "silver_current" in k and "error" not in k and k.endswith(".csv"):
+                objs.append(o)
+    if not objs:
+        raise RuntimeError("data_csv/에서 silver_current CSV를 찾지 못했습니다.")
+    latest = max(objs, key=lambda o: o["LastModified"])
+    print(f"[INFO] 최신 스냅샷 자동선택: {latest['Key'].split('/')[-1]} ({latest['LastModified'].date()})")
+    return latest["Key"]
 
 SET_CYPHER = """
 UNWIND $rows AS row
@@ -53,11 +69,13 @@ def load_rows(text: str) -> list[dict]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--s3-key", default=DEFAULT_KEY)
+    ap.add_argument("--s3-key", default=None, help="미지정 시 최신 silver_current 자동선택")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
-    text = boto3.client("s3").get_object(Bucket=BUCKET, Key=args.s3_key)["Body"].read().decode("utf-8-sig", errors="replace")
+    s3 = boto3.client("s3")
+    key = args.s3_key or resolve_latest_key(s3)
+    text = s3.get_object(Bucket=BUCKET, Key=key)["Body"].read().decode("utf-8-sig", errors="replace")
     rows = load_rows(text)
     print(f"CSV 링크 행(product_url+goodsNo 유효): {len(rows)}")
     print(f"  샘플: {rows[0]['product_id'][:8]}... goods_no={rows[0]['goods_no']} url={rows[0]['product_url'][:70]}")
