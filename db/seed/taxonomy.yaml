@@ -1,0 +1,238 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# 4EVR0 taxonomy 단일 진실 원천 (SSOT)
+#
+# concern→effect 매핑·제품 카테고리·구어체 동의어를 여기서만 관리한다.
+# 이 파일을 수정한 뒤 반드시 생성기를 실행해 파생 산출물을 갱신할 것:
+#
+#   python scripts/generate_taxonomy_artifacts.py
+#
+# 파생 산출물 (직접 수정 금지):
+#   - GraphDB-Server/migrations/V002__taxonomy_relates_to.cypher
+#   - GraphDB-Server/migrations/V003__concern_categories.cypher
+#   - 4EVR0-Server/app/domain/taxonomy_snapshot.json
+#
+# effects 리스트는 우선순위 순서(0부터 rank 부여). categories 미지정 시
+# default_categories 적용. synonyms는 사용자 텍스트 매칭 + (Phase 2) 임베딩 텍스트에 사용.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# leave-on 제품 기준 기본 카테고리 (씻어내는 클렌징 계열 제외)
+default_categories: [크림, 세럼, 앰플, 에센스, 로션, 토너, 미스트, 올인원]
+
+effects:
+  ANTI_INFLAMMATORY: {name_en: Anti-inflammatory, name_ko: 항염, group: calming, description: Reduces inflammatory response in skin}
+  SOOTHING: {name_en: Soothing, name_ko: 진정, group: calming, description: Reduces irritation and redness}
+  BARRIER_REPAIR: {name_en: Barrier repair, name_ko: 피부 장벽 강화, group: barrier, description: Supports recovery of the skin barrier}
+  HYDRATING: {name_en: Hydrating, name_ko: 보습, group: hydration, description: Increases skin hydration}
+  MOISTURE_RETENTION: {name_en: Moisture retention, name_ko: 수분 유지, group: hydration, description: Prevents transepidermal water loss}
+  SEBUM_REGULATION: {name_en: Sebum regulation, name_ko: 피지 조절, group: acne_oil, description: Regulates sebum production}
+  ANTIMICROBIAL: {name_en: Antimicrobial, name_ko: 항균, group: acne_oil, description: Inhibits growth of microbes}
+  KERATOLYTIC: {name_en: Keratolytic, name_ko: 각질 용해, group: acne_exfoliation, description: Promotes exfoliation of keratinocytes}
+  COMEDOLYTIC: {name_en: Comedolytic, name_ko: 면포 개선, group: acne_exfoliation, description: Reduces comedones (blackheads/whiteheads)}
+  WOUND_HEALING: {name_en: Wound healing, name_ko: 상처 회복, group: repair, description: Promotes wound healing}
+  DEPIGMENTING: {name_en: Depigmenting, name_ko: 미백, group: pigmentation, description: Reduces melanin production}
+  BRIGHTENING: {name_en: Brightening, name_ko: 톤 개선, group: pigmentation, description: Improves overall skin tone}
+  ANTIOXIDANT: {name_en: Antioxidant, name_ko: 항산화, group: protection, description: Reduces oxidative stress}
+  PHOTOPROTECTIVE: {name_en: Photoprotective, name_ko: 광보호, group: protection, description: Protects skin from UV damage}
+  ANTI_AGING: {name_en: Anti-aging, name_ko: 노화 개선, group: aging, description: Improves wrinkles or elasticity}
+
+concerns:
+  # ── acne group ────────────────────────────────────────────────────────────
+  ACNE:
+    name_en: Acne
+    name_ko: 여드름
+    group: acne
+    description: Inflammatory or non-inflammatory acne
+    effects: [ANTI_INFLAMMATORY, SEBUM_REGULATION, KERATOLYTIC, COMEDOLYTIC, ANTIMICROBIAL]
+    categories: [세럼, 앰플, 에센스, 로션, 토너, 미스트, 올인원, 필링스크럽]
+    synonyms: [여드름, 트러블, 뾰루지, 피부트러블, 뾰로지]
+  COMEDONES:
+    name_en: Comedones
+    name_ko: 면포
+    group: acne
+    description: Blackheads and whiteheads
+    effects: [KERATOLYTIC, COMEDOLYTIC, SEBUM_REGULATION]
+    categories: [세럼, 앰플, 에센스, 로션, 토너, 미스트, 올인원]
+    synonyms: [면포, 블랙헤드, 화이트헤드, 좁쌀]
+  PORE_CONGESTION:
+    name_en: Pore congestion
+    name_ko: 모공 막힘
+    group: acne
+    description: Clogged pores from sebum and dead skin cells
+    effects: [KERATOLYTIC, COMEDOLYTIC, SEBUM_REGULATION]
+    categories: [세럼, 앰플, 에센스, 로션, 토너, 미스트, 올인원]
+    synonyms: [모공막힘, 모공 막힘, 모공 오염, 모공오염]
+  # ── oil group ─────────────────────────────────────────────────────────────
+  ENLARGED_PORES:
+    name_en: Enlarged pores
+    name_ko: 모공 확대
+    group: oil
+    description: Visibly enlarged pores
+    effects: [SEBUM_REGULATION, KERATOLYTIC]
+    categories: [세럼, 앰플, 에센스, 로션, 토너, 미스트, 올인원]
+    synonyms: [모공, 모공확대, 넓은 모공, 모공 넓음, 모공넓음]
+  OILY_SKIN:
+    name_en: Oily skin
+    name_ko: 지성 피부
+    group: oil
+    description: Excess sebum production
+    effects: [SEBUM_REGULATION, ANTI_INFLAMMATORY]
+    categories: [세럼, 앰플, 에센스, 로션, 토너, 미스트, 올인원]
+    synonyms: [번들번들, 번질, 피지, 유분, 번들거림]
+  # ── sensitivity group ─────────────────────────────────────────────────────
+  SENSITIVE_SKIN:
+    name_en: Sensitive skin
+    name_ko: 민감성 피부
+    group: sensitivity
+    description: Skin easily irritated
+    effects: [SOOTHING, ANTI_INFLAMMATORY, BARRIER_REPAIR, HYDRATING]
+    synonyms: [민감성 피부, 민감 피부, 예민 피부, 피부 민감]
+  REDNESS:
+    name_en: Redness
+    name_ko: 붉은기
+    group: sensitivity
+    description: Inflammation related redness
+    effects: [ANTI_INFLAMMATORY, SOOTHING]
+    synonyms: [홍조, 붉은기, 붉음, 빨개짐, 피부 붉음]
+  IRRITATED_SKIN:
+    name_en: Irritated skin
+    name_ko: 자극 피부
+    group: sensitivity
+    description: Burning or stinging skin
+    effects: [ANTI_INFLAMMATORY, SOOTHING, BARRIER_REPAIR]
+    synonyms: [자극, 따가움, 따끔, 피부 자극, 자극받은]
+  ATOPIC_PRONE:
+    name_en: Atopic-prone skin
+    name_ko: 아토피 피부 경향
+    group: sensitivity
+    description: Skin prone to atopic dermatitis
+    effects: [ANTI_INFLAMMATORY, SOOTHING, BARRIER_REPAIR, HYDRATING]
+    synonyms: [아토피, 아토피성, 아토피 피부]
+  ROSACEA_PRONE:
+    name_en: Rosacea-prone skin
+    name_ko: 주사 피부 경향
+    group: sensitivity
+    description: Skin prone to rosacea
+    effects: [ANTI_INFLAMMATORY, SOOTHING]
+    synonyms: [주사, 주사피부, 로사세아]
+  # ── dryness group ─────────────────────────────────────────────────────────
+  DRY_SKIN:
+    name_en: Dry skin
+    name_ko: 건성 피부
+    group: dryness
+    description: Lack of moisture in skin
+    effects: [HYDRATING, MOISTURE_RETENTION, BARRIER_REPAIR]
+    categories: [크림, 세럼, 앰플, 에센스, 로션, 토너, 미스트, 올인원, 페이스오일]
+    synonyms: [건성 피부, 건조 피부, 피부 건조, 건조함, 건조한, 건조]
+  DEHYDRATED_SKIN:
+    name_en: Dehydrated skin
+    name_ko: 수분 부족 피부
+    group: dryness
+    description: Low water content in skin
+    effects: [HYDRATING, MOISTURE_RETENTION]
+    categories: [크림, 세럼, 앰플, 에센스, 로션, 토너, 미스트, 올인원, 페이스오일]
+    synonyms: [수분부족, 당기, 당김, 당겨, 수분 부족, 탈수, 피부 당김]
+  FLAKY_SKIN:
+    name_en: Flaky skin
+    name_ko: 각질
+    group: dryness
+    description: Visible flaking or peeling of skin
+    effects: [HYDRATING, KERATOLYTIC, MOISTURE_RETENTION]
+    categories: [크림, 세럼, 앰플, 에센스, 로션, 토너, 미스트, 올인원, 페이스오일, 필링스크럽]
+    synonyms: [각질, 각질 일어남, 각질일어남, 벗겨짐, 일어남]
+  ROUGH_TEXTURE:
+    name_en: Rough texture
+    name_ko: 피부결 거침
+    group: dryness
+    description: Uneven or rough skin texture
+    effects: [KERATOLYTIC, MOISTURE_RETENTION]
+    categories: [크림, 세럼, 앰플, 에센스, 로션, 토너, 미스트, 올인원, 필링스크럽]
+    synonyms: [피부결, 거친 피부, 피부 거침, 울퉁불퉁, 피부결 거침]
+  # ── barrier group ─────────────────────────────────────────────────────────
+  BARRIER_DAMAGE:
+    name_en: Skin barrier damage
+    name_ko: 피부 장벽 손상
+    group: barrier
+    description: Damaged skin barrier function
+    effects: [BARRIER_REPAIR, HYDRATING, MOISTURE_RETENTION, SOOTHING]
+    categories: [크림, 세럼, 앰플, 에센스, 로션, 토너, 미스트, 올인원, 페이스오일]
+    synonyms: [피부장벽, 장벽 손상, 피부 장벽, 장벽 약화, 피부 장벽 손상]
+  # ── pigmentation group ────────────────────────────────────────────────────
+  HYPERPIGMENTATION:
+    name_en: Hyperpigmentation
+    name_ko: 색소침착
+    group: pigmentation
+    description: Melanin overproduction
+    effects: [DEPIGMENTING, BRIGHTENING, ANTI_INFLAMMATORY]
+    synonyms: [색소침착, 기미, 색소, 색소 침착]
+  DULLNESS:
+    name_en: Dullness
+    name_ko: 피부 톤 저하
+    group: pigmentation
+    description: Uneven skin tone
+    effects: [BRIGHTENING, DEPIGMENTING, KERATOLYTIC, ANTIOXIDANT]
+    synonyms: [칙칙, 칙칙함, 어두운 피부, 피부 톤 저하, 피부톤 저하]
+  UNEVEN_SKIN_TONE:
+    name_en: Uneven skin tone
+    name_ko: 피부 톤 불균일
+    group: pigmentation
+    description: Blotchy or uneven skin tone
+    effects: [BRIGHTENING, DEPIGMENTING]
+    synonyms: [피부톤 불균일, 피부 톤 불균일, 얼룩덜룩, 피부 톤, 피부톤]
+  BLEMISHES:
+    name_en: Blemishes
+    name_ko: 잡티
+    group: pigmentation
+    description: Small dark spots and marks
+    effects: [DEPIGMENTING, BRIGHTENING, WOUND_HEALING]
+    synonyms: [잡티, 트러블 자국, 피부 결점]
+  POST_ACNE_MARKS:
+    name_en: Post-acne marks
+    name_ko: 여드름 자국
+    group: pigmentation
+    description: Marks left after acne
+    effects: [DEPIGMENTING, BRIGHTENING, WOUND_HEALING]
+    synonyms: [여드름 자국, 여드름자국, 여드름 흉터, 여드름흉터]
+  DARK_CIRCLES:
+    name_en: Dark circles
+    name_ko: 다크서클
+    group: pigmentation
+    description: Dark circles under the eyes
+    effects: [DEPIGMENTING, BRIGHTENING]
+    synonyms: [다크서클, 눈 밑 다크서클, 눈밑 다크서클]
+  # ── protection group ──────────────────────────────────────────────────────
+  SUNBURN:
+    name_en: Sun damage
+    name_ko: 자외선 손상
+    group: protection
+    description: UV-induced skin damage
+    effects: [PHOTOPROTECTIVE, ANTIOXIDANT, SOOTHING]
+    synonyms: [자외선, 자외선 손상, 선번, 햇빛 손상, 햇빛손상]
+  # ── aging group ───────────────────────────────────────────────────────────
+  AGING_SIGNS:
+    name_en: Aging signs
+    name_ko: 노화 징후
+    group: aging
+    description: Wrinkles and loss of elasticity
+    effects: [ANTI_AGING, ANTIOXIDANT]
+    synonyms: [노화, 노화 징후, 나이듦]
+  WRINKLES:
+    name_en: Wrinkles
+    name_ko: 주름
+    group: aging
+    description: Fine lines and deep wrinkles
+    effects: [ANTI_AGING, HYDRATING]
+    synonyms: [주름, 잔주름, 깊은 주름]
+  LOSS_OF_ELASTICITY:
+    name_en: Loss of elasticity
+    name_ko: 탄력 저하
+    group: aging
+    description: Reduced skin firmness
+    effects: [ANTI_AGING, MOISTURE_RETENTION]
+    synonyms: [탄력 저하, 탄력없음, 탄력 없음]
+  SAGGING_SKIN:
+    name_en: Sagging skin
+    name_ko: 피부 처짐
+    group: aging
+    description: Loss of skin firmness and sagging
+    effects: [ANTI_AGING]
+    synonyms: [피부 처짐, 처짐, 피부처짐, 탄력]
