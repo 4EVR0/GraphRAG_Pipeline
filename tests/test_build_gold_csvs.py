@@ -1,4 +1,5 @@
 import csv
+import math
 import tempfile
 import unittest
 from pathlib import Path
@@ -92,6 +93,70 @@ class ClaimBatchSelectionTest(unittest.TestCase):
                 by_effect["HYDRATING"]["graph_score:float"],
                 by_effect["KERATOLYTIC"]["graph_score:float"],
             )
+
+    def test_suspect_ingredient_detection_does_not_support_an_edge(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            batch = root / "batch=suspect"
+            batch.mkdir()
+            base = {
+                "ingredient_name": "Niacinamide", "relation": "improves",
+                "effect_ids": "1", "concern_ids": "", "eligibility_tier": "soft_graph",
+                "strength_label": "strong", "significance_label": "significant",
+                "attribution_label": "single_active", "claim_type": "efficacy",
+                "source_sentence": "Niacinamide improved skin hydration.",
+                "title": "", "study_context": "human_topical",
+                "all_detected_ingredients": "Niacinamide",
+            }
+            rows = [
+                {**base, "pmid": "100", "row_weight": "0.5", "ingredient_detection_suspect": "True"},
+                {**base, "pmid": "200", "row_weight": "0.25", "ingredient_detection_suspect": "False"},
+            ]
+            with (batch / "gold_claim_all.csv").open("w", encoding="utf-8", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=list(rows[0]))
+                writer.writeheader()
+                writer.writerows(rows)
+
+            with patch.object(build_gold_csvs, "CLAIM_BATCH_ROOT", root):
+                edges = build_gold_csvs.load_affects_rows(
+                    {1: "HYDRATING"}, {"niacinamide": "NIACINAMIDE"},
+                    claim_batch_id="suspect",
+                )
+
+            self.assertEqual(1, len(edges))
+            self.assertEqual(1, edges[0]["paper_count:int"])
+            self.assertEqual(round(math.log1p(0.25), 6), edges[0]["graph_score:float"])
+
+    def test_ceramide_family_name_is_not_mapped_to_ceramide_np(self) -> None:
+        inci = pd.DataFrame([{
+            "inci_name": "CERAMIDE NP", "eng_name": "Ceramide", "kor_name": "세라마이드",
+        }])
+        lookup = build_gold_csvs.build_inci_lookup(inci, {"CERAMIDE NP"})
+
+        self.assertEqual("CERAMIDE NP", lookup["ceramide np"])
+        self.assertNotIn("ceramide", lookup)
+        self.assertNotIn("세라마이드", lookup)
+
+    def test_legacy_ceramide_np_paper_edges_are_not_restored(self) -> None:
+        def edge(name: str, evidence_type: str) -> dict:
+            return {
+                ":START_ID(Ingredient)": name, ":END_ID(Effect)": "ANTI_AGING",
+                "type": "improves", "evidence_type": evidence_type,
+            }
+
+        retained = build_gold_csvs.retain_legacy_affects(
+            [
+                edge("CERAMIDE NP", "pubmed_evidence"),
+                edge("CERAMIDE NP", "cosing_function"),
+                edge("NIACINAMIDE", "pubmed_evidence"),
+            ],
+            {"CERAMIDE NP", "NIACINAMIDE"}, {"ANTI_AGING"}, set(),
+        )
+
+        self.assertEqual(
+            [edge("CERAMIDE NP", "cosing_function"), edge("NIACINAMIDE", "pubmed_evidence")],
+            retained,
+        )
 
     def test_cosing_edges_only_reference_product_ingredients(self) -> None:
         products = pd.DataFrame(
