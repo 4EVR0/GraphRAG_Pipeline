@@ -510,6 +510,10 @@ def load_affects_rows(
     eligible = evidence[
         evidence["current_eligibility_tier"].isin(["strict_graph", "soft_graph"])
     ].copy()
+    if "ingredient_detection_suspect" in eligible.columns:
+        suspect = eligible["ingredient_detection_suspect"].astype(str).str.strip().str.lower().isin({"true", "1"})
+        print(f"[claim] 성분 검출 의심 근거 제외: {int(suspect.sum())}행")
+        eligible = eligible[~suspect].copy()
     print(
         f"[claim] 전체 배치={len(all_batches)}, evidence={len(evidence)}, "
         f"graph_eligible={len(eligible)}"
@@ -625,6 +629,61 @@ def write_csv(path: Path, fieldnames: list[str], rows: list[dict]) -> None:
     print(f"[write] {path.relative_to(ROOT)}  ({len(rows)}행)")
 
 
+def build_inci_lookup(inci_df: pd.DataFrame, valid_ingredient_ids: set[str]) -> dict[str, str]:
+    """성분명/동의어를 INCI로 매핑하되 종을 특정할 수 없는 총칭은 제외한다."""
+    inci_lookup: dict[str, str] = {}
+    ambiguous_ceramide_aliases = {"ceramide", "세라마이드"}
+    for _, row in inci_df.iterrows():
+        if pd.isna(row["inci_name"]):
+            continue
+        inci_name = str(row["inci_name"])
+        if inci_name not in valid_ingredient_ids:
+            continue
+        inci_lookup[inci_name.lower()] = inci_name
+        for column in ("eng_name", "kor_name"):
+            if pd.isna(row.get(column)):
+                continue
+            alias = str(row[column]).strip().lower()
+            if alias and (alias not in ambiguous_ceramide_aliases or alias == inci_name.lower()):
+                inci_lookup[alias] = inci_name
+    manual_overrides = {
+        "alpha arbutin": "ALPHA-ARBUTIN",
+        "azelaic acid": "AZELAIC ACID",
+        "coenzyme q10": "UBIQUINONE",
+    }
+    inci_lookup.update({
+        alias: inci_name
+        for alias, inci_name in manual_overrides.items()
+        if inci_name in valid_ingredient_ids
+    })
+    return inci_lookup
+
+
+def retain_legacy_affects(
+    legacy_rows: list[dict],
+    valid_ingredient_ids: set[str],
+    valid_effects: set[str],
+    current_keys: set[tuple[str, str, str]],
+) -> list[dict]:
+    """기존 관계 중 유효한 것만 보존한다. 출처가 모호한 세라마이드 NP 논문 관계는 제외한다."""
+    return [
+        row for row in legacy_rows
+        if str(row.get(":START_ID(Ingredient)", "")) in valid_ingredient_ids
+        and str(row.get(":END_ID(Effect)", "")) in valid_effects
+        and (
+            str(row.get(":START_ID(Ingredient)", "")),
+            str(row.get(":END_ID(Effect)", "")),
+            str(row.get("type", "")),
+        ) not in current_keys
+        # 과거 CSV에는 PMID/원문이 없어 'Ceramide' 총칭에서 온 관계인지
+        # 확인할 수 없다. 특정 종의 논문 관계로 재사용하지 않는다.
+        and not (
+            str(row.get(":START_ID(Ingredient)", "")) == "CERAMIDE NP"
+            and str(row.get("evidence_type", "")) == "pubmed_evidence"
+        )
+    ]
+
+
 # ---------------------------------------------------------------------------
 # 메인
 # ---------------------------------------------------------------------------
@@ -734,32 +793,7 @@ def main(
         for row in ingredient_rows
         if row.get("ingredient_id:ID(Ingredient)")
     }
-    inci_lookup: dict[str, str] = {}
-    for _, row in inci_df.iterrows():
-        if pd.isna(row["inci_name"]):
-            continue
-        inci_name = str(row["inci_name"])
-        if inci_name not in valid_ingredient_ids:
-            continue
-        inci_lookup[inci_name.lower()] = inci_name
-        if pd.notna(row.get("eng_name")):
-            inci_lookup[str(row["eng_name"]).lower()] = inci_name
-        if pd.notna(row.get("kor_name")):
-            inci_lookup[str(row["kor_name"]).lower()] = inci_name
-    # 수동 보완 (INCI CSV 미등록 or 명칭 불일치)
-    manual_overrides: dict[str, str] = {
-        "alpha arbutin": "ALPHA-ARBUTIN",
-        "azelaic acid": "AZELAIC ACID",
-        "ceramide": "CERAMIDE NP",
-        "coenzyme q10": "UBIQUINONE",
-    }
-    inci_lookup.update(
-        {
-            alias: inci_name
-            for alias, inci_name in manual_overrides.items()
-            if inci_name in valid_ingredient_ids
-        }
-    )
+    inci_lookup = build_inci_lookup(inci_df, valid_ingredient_ids)
 
     # ── effect.csv ───────────────────────────────────────────────────────
     effect_rows = parse_effect_taxonomy()
@@ -823,12 +857,6 @@ def main(
             str(row["ingredient_id:ID(Ingredient)"])
             for row in ingredient_rows
         }
-        legacy_rows = [
-            row
-            for row in legacy_affects.to_dict("records")
-            if str(row.get(":START_ID(Ingredient)", "")) in valid_ingredient_ids
-            and str(row.get(":END_ID(Effect)", "")) in valid_effects
-        ]
         current_keys = {
             (
                 row[":START_ID(Ingredient)"],
@@ -837,16 +865,10 @@ def main(
             )
             for row in affects_rows
         }
-        retained_legacy = [
-            row
-            for row in legacy_rows
-            if (
-                row[":START_ID(Ingredient)"],
-                row[":END_ID(Effect)"],
-                row["type"],
-            )
-            not in current_keys
-        ]
+        retained_legacy = retain_legacy_affects(
+            legacy_affects.to_dict("records"), valid_ingredient_ids,
+            valid_effects, current_keys,
+        )
         affects_rows = retained_legacy + affects_rows
         print(
             f"[affects] 기존 운영 유효 edge 보존: {len(retained_legacy)}개 "
