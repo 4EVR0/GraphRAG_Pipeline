@@ -137,6 +137,24 @@ class ClaimBatchSelectionTest(unittest.TestCase):
         self.assertNotIn("ceramide", lookup)
         self.assertNotIn("세라마이드", lookup)
 
+    def test_verified_peptide_name_does_not_alias_a_different_inci(self) -> None:
+        inci = pd.DataFrame([
+            {"inci_name": "ACETYL HEXAPEPTIDE-8", "eng_name": "Acetyl Hexapeptide-8",
+             "kor_name": "아세틸헥사펩타이드-24아마이드"},
+            {"inci_name": "ACETYL HEXAPEPTIDE-24 AMIDE", "eng_name": "Acetyl Hexapeptide-24 Amide",
+             "kor_name": "아세틸헥사펩타이드-24아마이드"},
+        ])
+
+        corrected = build_gold_csvs.correct_verified_ingredient_names(inci)
+        lookup = build_gold_csvs.build_inci_lookup(
+            corrected, set(corrected["inci_name"]),
+        )
+
+        self.assertEqual("아세틸헥사펩타이드-8", corrected.iloc[0]["kor_name"])
+        self.assertEqual("아세틸헥사펩타이드-24아마이드", inci.iloc[0]["kor_name"])
+        self.assertEqual("ACETYL HEXAPEPTIDE-8", lookup["아세틸헥사펩타이드-8"])
+        self.assertEqual("ACETYL HEXAPEPTIDE-24 AMIDE", lookup["아세틸헥사펩타이드-24아마이드"])
+
     def test_legacy_ceramide_np_paper_edges_are_not_restored(self) -> None:
         def edge(name: str, evidence_type: str) -> dict:
             return {

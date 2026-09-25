@@ -47,6 +47,27 @@ S3_INCI_PREFIX = "INCI_data_gold/kcia_cosing/"
 S3_GOLD_PREFIX = "graph_gold_csvs/"
 INCI_FILENAME = "kcia_cosing_gold_ingredients.csv"
 
+# 대한화장품협회 성분사전 1718과 15424는 서로 다른 INCI 명칭이다.
+# 원천 CSV가 두 성분을 혼동해도 그래프 노드와 Gold claim 별칭을 오염시키지 않는다.
+# https://kcia.or.kr/cid/search/ingd_view.php?no=1718
+# https://kcia.or.kr/cid/search/ingd_view.php?no=15424
+_VERIFIED_KOREAN_NAMES = {
+    "ACETYL HEXAPEPTIDE-8": "아세틸헥사펩타이드-8",
+}
+
+
+def correct_verified_ingredient_names(inci_df: pd.DataFrame) -> pd.DataFrame:
+    """공식 INCI-한글명 쌍이 어긋난 알려진 원천 행을 교정한다."""
+    corrected = inci_df.copy()
+    for inci_name, kor_name in _VERIFIED_KOREAN_NAMES.items():
+        mask = corrected["inci_name"].astype(str).str.strip().str.upper() == inci_name
+        if mask.any():
+            incorrect = mask & (corrected["kor_name"].astype(str).str.strip() != kor_name)
+            if incorrect.any():
+                print(f"[INCI] {inci_name} 한글명 교정: {int(incorrect.sum())}행")
+            corrected.loc[mask, "kor_name"] = kor_name
+    return corrected
+
 
 # ---------------------------------------------------------------------------
 # S3 헬퍼
@@ -105,7 +126,7 @@ def load_inci_csv_from_s3(bucket: str) -> pd.DataFrame:
     # inci_name 중복 시 ingredient_code 높은 것(최신) 우선
     df = df.sort_values("ingredient_code", ascending=False).drop_duplicates("inci_name")
     print(f"[S3] INCI 고유 inci_name={len(df)}개")
-    return df
+    return correct_verified_ingredient_names(df)
 
 
 def load_existing_graph_csv(bucket: str, relative_key: str) -> pd.DataFrame:
