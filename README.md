@@ -161,6 +161,14 @@ ingredient_code,category,canonical_name,query_name,alias_list,concern_keywords,e
 NCBI E-utilities API에서 확인하고, `poc_output/pmc_fulltext/`의 로컬 SQLite에
 논문 버전·라이선스·본문 문단 관계를 저장합니다. 원문 데이터와 평가 결과는 Git에서
 제외됩니다. PMID를 바꾸려면 `--pmid 123 --pmid 456`처럼 최대 5건을 지정합니다.
+별도 테스트 Neo4j를 `127.0.0.1:17687`에 준비했다면
+`python -m scripts.load_pmc_poc_neo4j --load-local-neo4j`로 동일 문단과 출처
+관계를 적재할 수 있습니다. 이 로더는 원격 URI를 받지 않습니다.
+답변 A/B는 사용자 승인 후에만
+`python -m scripts.compare_pmc_answer_quality --allow-openai-send`로 실행합니다.
+결과를 기존 로컬 MLflow에 기록할 때는 별도의
+`graphrag-pmc-fulltext-poc` 실험으로 분리하며, 운영 평가와 비교 가능한
+점수로 취급하지 않습니다.
 
 이 실험은 **원문 접근과 출처 추적 가능성**을 검증할 뿐, Gold claim 생성이나 운영
 Neo4j 적재, 추천 응답 변경을 수행하지 않습니다. `CC BY-NC` 등 비상업적 이용
