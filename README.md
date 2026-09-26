@@ -155,6 +155,19 @@ ingredient_code,category,canonical_name,query_name,alias_list,concern_keywords,e
 
 ## 파이프라인 실행
 
+### 격리된 PMC 원문 PoC (운영 파이프라인에 미연결)
+
+`python -m scripts.run_pmc_fulltext_poc`는 CC BY 논문 3건만 공식 PMC BioC 및
+NCBI E-utilities API에서 확인하고, `poc_output/pmc_fulltext/`의 로컬 SQLite에
+논문 버전·라이선스·본문 문단 관계를 저장합니다. 원문 데이터와 평가 결과는 Git에서
+제외됩니다. PMID를 바꾸려면 `--pmid 123 --pmid 456`처럼 최대 5건을 지정합니다.
+
+이 실험은 **원문 접근과 출처 추적 가능성**을 검증할 뿐, Gold claim 생성이나 운영
+Neo4j 적재, 추천 응답 변경을 수행하지 않습니다. `CC BY-NC` 등 비상업적 이용
+조건, 버전/ID 불일치, 본문 또는 라이선스 누락은 자동으로 제외합니다. 논문 문단을
+근거로 사용하려면 별도의 claim 추출·귀속 검증과 기존 평가셋의 A/B 품질 검증이
+필요합니다.
+
 ### Step 1. Bronze — PubMed 논문 수집
 
 ```bash
