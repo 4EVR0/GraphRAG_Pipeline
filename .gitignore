@@ -25,6 +25,7 @@ mvenv/
 /bronze/
 /silver/
 /gold/
+/poc_output/
 pipeline/gold/**/__pycache__/
 *.csv
 !config/target_ingredients.csv
