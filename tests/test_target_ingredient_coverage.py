@@ -67,9 +67,15 @@ class TargetIngredientCoverageTest(unittest.TestCase):
     def test_sebum_targets_have_direct_search_hints(self) -> None:
         required = {"sebum", "oiliness", "oily skin", "pore"}
 
-        for query_name in ["Niacinamide", "Zinc PCA", "Zinc Gluconate", "Azelaic Acid"]:
+        for query_name in ["Niacinamide", "Zinc PCA", "Zinc Gluconate"]:
             with self.subTest(query_name=query_name):
                 self.assertIngredientCovers(query_name, keywords=required)
+
+    def test_kr_banned_ingredients_are_not_targets(self) -> None:
+        # 식약처 사용제한 원료정보 기준 국내 배합금지 성분 (INCI_Pipeline mfds_regulation)
+        kr_banned = {"azelaic acid", "hydroquinone"}
+
+        self.assertEqual(set(), kr_banned & set(self.by_query_name))
 
     def test_dullness_targets_have_brightening_search_hints(self) -> None:
         required = {"brightening", "hyperpigmentation", "dullness", "uneven skin tone"}

@@ -2651,4 +2651,4 @@ ingredient_code,category,canonical_name,query_name,alias_list,concern_keywords,e
 2650,hair,히노키티올,Hinokitiol,HINOKITIOL,hair conditioning|hair repair|hair damage,,true
 2651,exfoliation,글라이콜릭애씨드,Glycolic Acid,GLYCOLIC ACID,exfoliation|keratolytic|skin renewal|desquamation|texture|roughness|pore|pores|acne|dullness|uneven skin tone|brightening,,true
 2652,exfoliation,락토바이오닉애씨드,Lactobionic Acid,LACTOBIONIC ACID,exfoliation|keratolytic|skin renewal|desquamation|texture|roughness|dullness|uneven skin tone|brightening|hydration,,true
-2653,acne_control,아젤라익애씨드,Azelaic Acid,AZELAIC ACID,sebum|oiliness|oily skin|oil control|acne|pore|pores|comedolytic|keratolytic|hyperpigmentation|melasma|dullness|uneven skin tone,,true
+2653,acne_control,아젤라익애씨드,Azelaic Acid,AZELAIC ACID,sebum|oiliness|oily skin|oil control|acne|pore|pores|comedolytic|keratolytic|hyperpigmentation|melasma|dullness|uneven skin tone,,false
