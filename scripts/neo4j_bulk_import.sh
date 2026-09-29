@@ -17,4 +17,4 @@ neo4j-admin database import full \
 
 echo "벌크 임포트는 그래프를 덮어쓴다. 기동 후 추가 적재 스크립트를 다시 실행할 것:"
 echo "  python scripts/load_caution_to_neo4j.py"
-echo "  python scripts/load_kr_regulation_to_neo4j.py --csv <INCI_Pipeline ingredient_kr_regulation.csv>"
+echo "  (INCI_Pipeline 저장소) python -m pipeline.mfds_regulation.load_neo4j   # 국내 규제 상태, 최신 결과"
