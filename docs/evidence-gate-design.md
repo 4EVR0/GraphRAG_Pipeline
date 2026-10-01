@@ -110,6 +110,50 @@ Methods/Results 등의 구획, 정정·철회 등 연결 정보, DOI/PMCID, 응�
 임의로 채우지 않는다. 수집된 papers.jsonl은 Gold claim CSV나 승인 JSONL이 아니다.
 관찰 결과와 비교 대상별로 주장을 분리한 다음 승인 검토를 수행해야 한다.
 
+### 주장별 검수 패킷 (승인 전 단계)
+
+```bash
+python -m scripts.build_evidence_review_packets \
+  --snapshot-dir /absolute/path/to/source-snapshot \
+  --annotations /absolute/path/to/provisional-outcomes.jsonl \
+  --output-dir /absolute/path/to/new-review-packets
+```
+
+이 도구는 자동 추출기가 아니다. 사람이 또는 모델이 작성한 **잠정 해석**을 원본에
+연결해 독립 검토할 수 있도록 준비한다. raw XML의 SHA256을 수집 manifest와 비교하고
+다시 파싱하므로 수정된 `papers.jsonl`을 신뢰하지 않는다. 기존 Gold나 승인 파일은 변경하지 않는다.
+
+- 입력 한 행은 **성분 × 측정 지표 × 보고된 비교 × 적용 조건**의 한 결과다.
+  같은 논문의 수분량 증가와 TEWL 무효 결과를 별도 행으로 보존한다. 같은 원문 문장을
+  사용할 수 있지만 다른 측정 지표의 방향/유의성을 가져오면 안 된다.
+- `study_control`은 연구 설계의 대조군, `result_comparator`는 해당 결과의 실제 비교 대상이다.
+  연구가 RCT여도 결과에 baseline 비교만 보고되었다면 vehicle 대비 우월성으로 승격하지 않는다.
+- `fields`의 모든 키는 필수이고 확인 불가 값은 `null`이다. 값이 있으면
+  `{"value": "...", "spans": [{"section": 0, "quote": "literal abstract text"}]}`로
+  출처를 연결한다. section은 0부터 시작하는 초록 구획 번호다. 임의로 번역한 문장을 quote로 넣지 않는다.
+- 필드: ingredient_name, subject, route, claim_kind, attribution, study_control,
+  result_comparator, measured_endpoint, change_direction, result_support, significance,
+  population, body_site, concentration, formulation, duration.
+- 행 메타데이터: schema_version(`atomic-outcome-review-v1`), source_response_sha256,
+  pmid, prepared_by, prepared_on, result_span, limitations, note. `prepared_by`는 초안 작성자이지 승인자가 아니다.
+  실제 승인 속성을 입력하면 오류로 처리한다. 합성 입력 예시는 `tests/test_evidence_review_packets.py` 참고.
+- `no_detected_effect`는 해당 조건에서 효과/차이를 확인하지 못했다는 뜻이다.
+  동등성 입증, 모든 조건에서 무효, 악화, 성분 전체 배제를 의미하지 않는다.
+- `proposed_effect_code`는 방향에 따른 잠정 매핑일 뿐이다. TEWL 감소는 MOISTURE_RETENTION으로
+  매핑하고 자동으로 BARRIER_REPAIR에 중복 배정하지 않는다. 무효·내약성 결과는 긍정 효능으로 매핑하지 않는다.
+
+출력은 `review_packets.jsonl`과 `manifest.json`이다. 원본 초록과 필드별 인용구,
+누락/비교/귀속/유의성 문제, 정정·철회 연결 검토 필요 여부, 원본·초안·코드 해시를 남긴다.
+전부 `pending_independent_review`, `recommendation_eligible=false`이며 **차단 사유가 없어도 승인이 아니다.**
+문자열 존재 검사는 의미 함의나 임상 타당성을 입증하지 않는다. 전체 초록으로 인용한 필드는
+검토 시 정확한 절과 맥락을 확인한다. 스냅샷 해시는 로컬 변경 감지용이며 출처의 암호학적 인증은 아니다.
+
+현재 gate의 `--reviews` 계약과 의도적으로 다르며 직접 투입할 수 없다. 기존 CSV 관계와의
+계보 연결·독립 검토·승인 변환은 후속 작업이다. 자동 긍정 선별이나 추천 점수 계산을 하지 않는다.
+잠정 초안은 편의 표본이며 모든 결과를 빠짐없이 추출했다거나 근거 정확도를 측정했다는 뜻이 아니다.
+
+### 남은 운영 전 검증
+
 1. 보습 표본의 독립 검토표와 승인 가능한 정상 대조 사례 확보. 카페인 조건/연어알 출처 복원.
 2. 논문 단위 맥락 추출 + 주장 단위 endpoint/span 구조화. LLM은 초안 생성만 수행하고
    외부 전송이 필요하면 데이터 범위와 비용을 별도 승인받는다.
