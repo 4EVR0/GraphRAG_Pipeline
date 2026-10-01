@@ -91,6 +91,25 @@ API, LLM, DB 연결, S3 업로드 없음. 기존 output 디렉터리는 덮어�
 
 ## 다음 PR 및 운영 전 승인 조건
 
+### 임상 표본의 원문맥 확보
+
+```bash
+python -m scripts.fetch_pubmed_review_sources \
+  --pmid 18498456 --pmid 11737814 \
+  --output-dir /absolute/path/to/new-source-snapshot
+```
+
+명시한 고유 PMID 1–10건만 NCBI EFetch 한 요청으로 읽는다. 공개 초록·서지정보만
+가져오고 전문 수집/LLM 추출/승인/운영 적재를 수행하지 않는다. 정확한 응답 XML,
+Methods/Results 등의 구획, 정정·철회 등 연결 정보, DOI/PMCID, 응답 해시와 수집 시점을
+보존한다. MeSH의 Humans·Clinical Trial 표시만으로 임상 적합성을 승인하지 않는다.
+초록 없음은 명시하고, 응답 누락/중복 PMID·API 오류는 실패 처리한다. 기존 경로는 덮어쓰지 않는다.
+
+표본 검토는 긍정적인 보습 결과만 고르는 방식이 아니라 같은 연구의 TEWL 무효 결과,
+다른 대상군에서의 무효 결과도 함께 확인한다. 초록에 없는 적용 부위·비교군 농도·유의성을
+임의로 채우지 않는다. 수집된 papers.jsonl은 Gold claim CSV나 승인 JSONL이 아니다.
+관찰 결과와 비교 대상별로 주장을 분리한 다음 승인 검토를 수행해야 한다.
+
 1. 보습 표본의 독립 검토표와 승인 가능한 정상 대조 사례 확보. 카페인 조건/연어알 출처 복원.
 2. 논문 단위 맥락 추출 + 주장 단위 endpoint/span 구조화. LLM은 초안 생성만 수행하고
    외부 전송이 필요하면 데이터 범위와 비용을 별도 승인받는다.
