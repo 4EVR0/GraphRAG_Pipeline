@@ -52,6 +52,8 @@ Neo4j, 서버 검색을 변경하지 않는다. 실제 추천 효과가 검증�
 
 `--reviews` JSONL은 `tests/test_evidence_gate.py`의 `approved()`가 필드 예시를 제공한다.
 그 테스트는 **합성 데이터**이며 실제 승인 레코드로 사용하면 안 된다.
+record_id는 반드시 첫 감사의 decisions.jsonl에서 가져온다. CSV는 UTF-8 BOM을 제거해
+읽으므로 다른 디코딩 방식으로 별도 해시를 계산하지 않는다. 입력 파일 원본 해시는 별도 보존한다.
 
 - schema_version, record_id(전체 원본 행 해시), decision, reviewer, reviewed_on,
   source_verified, review_note, source_locator, supporting_quote(원문 문장에 존재해야 함)

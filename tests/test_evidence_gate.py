@@ -183,6 +183,16 @@ class ShadowAuditTest(unittest.TestCase):
             self.assertEqual({"candidate": 2}, manifest["status_counts"])
             self.assertEqual({"HYDRATING": 1}, manifest["candidate_unique_pmids_by_effect"])
 
+    def test_utf8_bom_does_not_change_parsed_record_identity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            row = source()
+            path = self.write_claims(root, [row])
+            path.write_bytes(b"\xef\xbb\xbf" + path.read_bytes())
+            audit(path, root / "out")
+            saved = json.loads((root / "out" / "decisions.jsonl").read_text())
+            self.assertEqual(record_id(row), saved["record_id"])
+
     def test_duplicate_and_stale_reviews_fail_before_output(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
