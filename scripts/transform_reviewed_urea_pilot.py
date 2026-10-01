@@ -17,7 +17,7 @@ from pathlib import Path
 from pipeline.gold.claim.evidence_gate import record_id
 from scripts.build_evidence_review_packets import load_snapshot, make_packet
 
-VERSION = "reviewed-urea-shadow-v1"
+VERSION = "reviewed-urea-shadow-v2"
 CASES = {
     "urea-legs-hydration": ("conditional_positive_hydration_evidence", "legs", "supported", "increase", "significant"),
     "urea-arms-hydration": ("no_detected_between_treatment_difference", "arms", "no_detected_effect", "no_detected_difference", "not_significant"),
@@ -91,6 +91,12 @@ def transform(snapshot: Path, annotations: Path, supplement: Path, checklist: Pa
                 "Cross-paper or cross-site parent")
         require(fields["ingredient_name"]["value"] == "Urea" and fields["measured_endpoint"]["value"] == "skin_water_content",
                 "Unexpected parent ingredient/endpoint")
+        # This profile is a reviewed literal mapping, not a general normalizer.
+        # Reject changed source conditions instead of emitting stale constants.
+        for key, value in {"population": "14 participants with ichthyosis vulgaris",
+                           "concentration": "7.5% urea", "formulation": "cream",
+                           "duration": "4 weeks"}.items():
+            require(fields[key]["value"] == value, "Parent outside fixed applicability profile")
 
     passages = indexed(sup.get("selected_passages"), "id")
     require(set(passages) == PASSAGES, "Missing or unexpected selected passage")
@@ -135,6 +141,14 @@ def transform(snapshot: Path, annotations: Path, supplement: Path, checklist: Pa
             "result_support": support, "change_direction": direction, "significance": significance,
             "effect_code": "HYDRATING" if site == "legs" else None,
             "constraints": constraints, "parent_observation": parent,
+            # Explicit one-paper test profile, NOT inferred from user text.
+            # Original human-readable source constraints remain above.
+            "applicability_scope": {
+                "population": "ichthyosis_vulgaris", "body_site": site,
+                "ingredient_name": "Urea", "route": "topical",
+                "concentration_percent": 7.5, "duration_days": 28,
+                "formulation": "study_matched_base_cream",
+            } if site else None,
             "context_supplement": {
                 "updates": {field: {"value": value["value"],
                     "passage_ids": [ref for ref in value["passage_ids"] if ref in refs]}

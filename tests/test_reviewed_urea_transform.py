@@ -21,8 +21,8 @@ class UreaTransformTest(unittest.TestCase):
                                                        ("arms", "no_detected_effect", "no_detected_difference", "not_significant")]:
             fields = {k: {"value": v} for k, v in dict(body_site=site, ingredient_name="Urea", measured_endpoint="skin_water_content",
                       result_support=support, change_direction=direction, significance=significance,
-                      population="synthetic disease-specific population", concentration="synthetic concentration",
-                      formulation="synthetic cream", duration="synthetic duration").items()}
+                      population="14 participants with ichthyosis vulgaris", concentration="7.5% urea",
+                      formulation="cream", duration="4 weeks").items()}
             self.parents[site] = {"observation_id": site, "draft_sha256": site + "-draft", "source": {"pmid": "35663767"},
                                   "draft": {"fields": fields}}
             drafts.append({"pmid": "35663767", "site": site})
@@ -138,6 +138,15 @@ class UreaTransformTest(unittest.TestCase):
         self.write_inputs()
         with self.assertRaises(ValueError):
             transform(**self.paths)
+
+    def test_changed_source_conditions_cannot_keep_fixed_profile(self):
+        fields = self.parents["legs"]["draft"]["fields"]
+        for key in ("population", "concentration", "formulation", "duration"):
+            original = fields[key]["value"]
+            fields[key]["value"] = "different condition"
+            with self.subTest(field=key), self.assertRaises(ValueError):
+                transform(**self.paths)
+            fields[key]["value"] = original
 
     def test_xml_projection_mismatch_rejected_even_with_updated_hashes(self):
         self.sup["selected_passages"][0]["text"] = "Mismatched projection"
