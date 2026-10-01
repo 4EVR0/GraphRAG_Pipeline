@@ -181,6 +181,42 @@ python -m scripts.audit_evidence_lineage \
 실제 의미 검수와 관계 계보 확정은 별도 작업이다. PMID 없는 운영 엣지의 계보를
 비슷한 속성만 보고 복원했다고 주장하지 않는다.
 
+### 사용자 분류 확인 이후: 요소 1편의 격리 변환
+
+```bash
+python -m scripts.transform_reviewed_urea_pilot \
+  --snapshot /absolute/path/to/abstract-snapshot \
+  --annotations /absolute/path/to/annotations.jsonl \
+  --supplement /absolute/path/to/supplement.json \
+  --checklist /absolute/path/to/checklist.json \
+  --acceptance /absolute/path/to/classification-acceptance.json \
+  --output /absolute/path/to/new-shadow-transform
+```
+
+이 도구는 **PMID 35663767 / PMC9060062.1의 합의된 세 분류만** 처리하는
+제한된 회귀 파일럿이다. 다른 논문에 같은 결론을 적용하는 범용 추출기나 임상 승인기가 아니다.
+실제 사용자 기록/논문 문단은 로컬 입력으로 받고 레포에는 합성 테스트만 둔다.
+
+분류 동의→검토표→보완 문단→원래 초록/주장 해시 연결을 검사한다. 보완 문단은
+XML fragment와 텍스트 projection도 대조하고, 기존 초록 인용을 본문 문장으로 바꾸지 않는다.
+입력 경로는 명시적으로 받고 기록 안의 경로를 따라 임의 파일을 읽지 않는다.
+해시는 변경 감지 및 연결용이지 검토자 신원이나 과학적 진실의 인증은 아니다.
+
+출력 `outcomes.jsonl`은 다음을 별도 레코드로 보존한다.
+
+- 다리: 조건부 긍정 수분량 결과, `HYDRATING`과 연구 대상·부위·농도·제형·기간 유지.
+- 팔: 군 간 차이 미확인, 효능 코드 없음. 성분의 보편적 무효나 동등성으로 바꾸지 않음.
+- TEWL: `excluded_not_reported`. 긍정도 무효도 아니므로 방향·유의성·효능 코드를 만들지 않음.
+
+세 분류 중 하나라도 미동의/누락/충돌이거나 출처가 바뀌면 출력 전에 실패한다.
+본문의 제형 비교 근거는 별도 context_supplement로 남기고 원래 두 관찰을 그대로 포함한다.
+초록과 본문의 통계 보고 차이도 보존한다. 부위별 결과를 통합하거나 추천 점수를 계산하지 않는다.
+
+전체 출력은 `recommendation_eligible=false`, `clinical_validity_review_completed=false`이고
+`isolated_regression_fixture_not_production_evidence` 용도다. 사용자의 제시된 분류 동의가
+독립 원문 전체 검수나 운영 추천 승인으로 확대되지 않는다. v1 gate의 승인 JSONL이나
+Neo4j 적재 형식으로 사용할 수 없다. manifest는 입력 해시·코드 SHA·dirty 여부를 남긴다.
+
 ### 남은 운영 전 검증
 
 1. 보습 표본의 독립 검토표와 승인 가능한 정상 대조 사례 확보. 카페인 조건/연어알 출처 복원.
