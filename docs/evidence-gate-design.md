@@ -152,6 +152,35 @@ python -m scripts.build_evidence_review_packets \
 계보 연결·독립 검토·승인 변환은 후속 작업이다. 자동 긍정 선별이나 추천 점수 계산을 하지 않는다.
 잠정 초안은 편의 표본이며 모든 결과를 빠짐없이 추출했다거나 근거 정확도를 측정했다는 뜻이 아니다.
 
+### 기존 Gold 주장과 출처 대조
+
+```bash
+python -m scripts.audit_evidence_lineage \
+  --claims /absolute/path/to/one-batch/gold_claim_all.csv \
+  --snapshot-dir /absolute/path/to/source-snapshot \
+  --annotations /absolute/path/to/provisional-outcomes.jsonl \
+  --output-dir /absolute/path/to/new-lineage-audit
+```
+
+단일 명시 배치의 전체 행 해시, 원본 근거 ID, 파일 해시와 모든 CSV 레코드 번호를
+보존하면서 같은 PMID의 잠정 관찰 결과와 기존 주장들을 나란히 보여준다.
+원본 XML 해시와 초안을 재검증하고 혼합 배치·중복 관찰·잘못된 출처는 출력 전에 실패한다.
+중복 CSV 행은 한 번만 집계하지만 원본 위치는 모두 남긴다.
+
+- `same_pmid_rows_found`는 논문 식별자가 같다는 뜻이지 주장 의미가 같다는 뜻이 아니다.
+- `literal_source_locations`는 기존 원문 문장의 실제 초록 위치다. 해당 구획에 기록된
+  `RESULTS: ` 등의 라벨만 제거할 수 있고 문자열을 유사도 기반으로 맞추지 않는다.
+- `literal_result_overlap_observation_ids`도 문장 포함 관계만 표시한다. 같은 문장에서
+  추출한 극성 반전이나 성분 귀속 오류를 자동 승인하지 않는다.
+- `absent_from_selected_batch`는 선택한 로컬 배치에서 찾지 못했다는 뜻이다.
+  전체 논문 corpus나 운영 Neo4j에 없다는 의미로 확장하지 않는다.
+- 성분 이름 번역/동의어/INCI를 자동으로 통합하지 않는다. 기존 잘못된 행도 수정/삭제하지 않는다.
+
+출력 `lineage_review.jsonl`은 원본/잠정 결과의 대조 자료이고 `manifest.json`은 재현 정보다.
+`verified_claim_links=0`, `production_graph_lineage_verified=false`를 명시한다.
+실제 의미 검수와 관계 계보 확정은 별도 작업이다. PMID 없는 운영 엣지의 계보를
+비슷한 속성만 보고 복원했다고 주장하지 않는다.
+
 ### 남은 운영 전 검증
 
 1. 보습 표본의 독립 검토표와 승인 가능한 정상 대조 사례 확보. 카페인 조건/연어알 출처 복원.
