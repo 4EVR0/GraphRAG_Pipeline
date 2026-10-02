@@ -20,4 +20,5 @@ VALUES
 ('ANTIOXIDANT','Antioxidant','항산화','protection','Reduces oxidative stress'),
 ('WOUND_HEALING','Wound healing','상처 회복','repair','Promotes wound healing'),
 ('ANTI_AGING','Anti-aging','노화 개선','aging','Improves wrinkles or elasticity'),
-('PHOTOPROTECTIVE','Photoprotective','광보호','protection','Protects skin from UV damage');
+('PHOTOPROTECTIVE','Photoprotective','광보호','protection','Protects skin from UV damage'),
+('BLEMISH_CARE','Blemish care','트러블 개선','acne_outcome','Reported to improve acne/blemishes without a stated mechanism (reference_book evidence)');
