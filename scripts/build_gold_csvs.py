@@ -34,6 +34,7 @@ from botocore.exceptions import ClientError
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
+from pipeline.claim.services.claim_extractor import extractor
 from pipeline.gold.claim.evidence_scoring import compute_eligibility_tier
 
 GOLD_NODES = ROOT / "gold" / "nodes"
@@ -470,13 +471,42 @@ def _all_claim_batches(
     return batches
 
 
+# 내약성·안전성 관찰은 효능 근거가 아니다. "잘 견딘다"가 각질·진정 효능 엣지로
+# 승격되지 않게 AFFECTS 집계에서 제외한다(#41, #49).
+_NON_EFFICACY_RELATIONS = frozenset({
+    "is_well_tolerated_for", "is_safe_for", "does_not_cause", "causes",
+})
+_NON_EFFICACY_TARGET = re.compile(r"tolera|safety|side effect|adverse", re.IGNORECASE)
+# 같은 성분·효능에 관계가 여럿이면 엣지 type은 가장 강한 근거의 관계로 정하고,
+# 근거 강도가 같으면 이 순서를 따른다.
+_RELATION_PRIORITY = ("improves", "reduces", "prevents", "regulates", "inhibits",
+                      "modulates", "stimulates", "increases")
+
+
+def _target_effect_codes(
+    target: str,
+    relation: str,
+    effect_rows: list[dict],
+) -> set[str] | None:
+    """claim target만으로 매핑되는 효능. target이 없으면 None(기존 매핑 유지)."""
+    if not target:
+        return None
+    ids = extractor.extract_effect_ids(target, relation, effect_rows)
+    by_id = {row["effect_id"]: row["effect_code"] for row in effect_rows}
+    return {by_id[i] for i in ids}
+
+
 def load_affects_rows(
     effect_id_to_code: dict[int, str],
     inci_lookup: dict[str, str],
     since: str | None = None,
     claim_batch_id: str | None = None,
+    evaluated_ingredients: set[str] | None = None,
 ) -> list[dict]:
-    """Graph-eligible evidence를 ingredient/effect/relation 단위로 집계합니다."""
+    """Graph-eligible evidence를 ingredient/effect 단위로 집계합니다.
+
+    evaluated_ingredients가 주어지면 현재 claim 배치에서 재평가된 INCI를 채운다.
+    """
     all_batches = _all_claim_batches(
         since=since,
         claim_batch_id=claim_batch_id,
@@ -527,6 +557,13 @@ def load_affects_rows(
             detected_labels=pipe_values(row.get("all_detected_ingredients")),
         )
 
+    if evaluated_ingredients is not None:
+        evaluated_ingredients.update(
+            inci_lookup[name.lower()]
+            for name in evidence["ingredient_name"].dropna().astype(str)
+            if name.lower() in inci_lookup
+        )
+
     evidence["current_eligibility_tier"] = evidence.apply(current_tier, axis=1)
     eligible = evidence[
         evidence["current_eligibility_tier"].isin(["strict_graph", "soft_graph"])
@@ -543,14 +580,32 @@ def load_affects_rows(
     # canonical claim 수준의 effect union을 사용하면 한 논문의 부차 effect가
     # 같은 target을 공유하는 모든 논문의 누적 점수를 받는다. Evidence 행의
     # 실제 effect_ids로 그룹화해 effect 간 점수 누수를 막는다.
-    support_by_edge: dict[tuple[str, str, str], dict[str, float]] = {}
+    # effect_ids는 원문 문장 전체로 매핑돼 한 문장의 다른 결과(보습·장벽 등)까지
+    # 들어 있으므로, claim target으로도 매핑되는 효능만 남긴다.
+    effect_names = {r["effect_code"]: r["effect_name_en"] for r in parse_effect_taxonomy()}
+    effect_rows = [
+        {"effect_id": eid, "effect_code": code, "effect_name_en": effect_names.get(code, code)}
+        for eid, code in effect_id_to_code.items()
+    ]
+    support_by_edge: dict[tuple[str, str], dict[str, float]] = {}
+    relation_support: dict[tuple[str, str], dict[str, float]] = {}
     unmapped_ingredients: set[str] = set()
     excluded_inci = {"CREAM", "WATER", "MELANIN"}
+    dropped = {"non_efficacy": 0, "effect_not_in_target": 0}
 
     for _, claim in eligible.iterrows():
         ingredient_name = str(claim["ingredient_name"])
         relation = str(claim["relation"])
         effect_ids_raw = str(claim.get("effect_ids", ""))
+        target = "" if pd.isna(claim.get("target")) else str(claim.get("target", "")).strip()
+        if (
+            relation in _NON_EFFICACY_RELATIONS
+            or str(claim.get("claim_type", "")).strip().lower() == "safety"
+            or _NON_EFFICACY_TARGET.search(target)
+        ):
+            dropped["non_efficacy"] += 1
+            continue
+        target_effects = _target_effect_codes(target, relation, effect_rows)
 
         inci_name = inci_lookup.get(ingredient_name.lower())
         if not inci_name:
@@ -577,23 +632,45 @@ def load_affects_rows(
             # 피지 증가 관찰은 SEBUM_REGULATION 추천 효능으로 노출하지 않는다.
             if effect_code == "SEBUM_REGULATION" and relation == "increases":
                 continue
-            key = (inci_name, effect_code, relation)
+            if target_effects is not None and effect_code not in target_effects:
+                dropped["effect_not_in_target"] += 1
+                continue
+            # 관계(improves/reduces/regulates)별로 엣지를 나누면 같은 논문이
+            # 같은 성분·효능에 여러 엣지로 들어가고 점수·논문 수가 쪼개진다.
+            key = (inci_name, effect_code)
             by_paper = support_by_edge.setdefault(key, {})
             by_paper[pmid] = max(by_paper.get(pmid, 0.0), row_weight)
+            by_relation = relation_support.setdefault(key, {})
+            by_relation[relation] = max(by_relation.get(relation, 0.0), row_weight)
 
     if unmapped_ingredients:
         print(f"[WARN] INCI 매핑 실패 ingredient: {sorted(unmapped_ingredients)}")
+    print(
+        f"[claim] 효능 근거 아님(내약성·안전성) 제외: {dropped['non_efficacy']}행, "
+        f"target과 무관한 효능 매핑 제외: {dropped['effect_not_in_target']}건"
+    )
+
+    def edge_type(key: tuple[str, str]) -> str:
+        by_relation = relation_support[key]
+        return min(
+            by_relation,
+            key=lambda rel: (
+                -by_relation[rel],
+                _RELATION_PRIORITY.index(rel) if rel in _RELATION_PRIORITY else len(_RELATION_PRIORITY),
+                rel,
+            ),
+        )
 
     rows = [
         {
             ":START_ID(Ingredient)": ingredient,
             ":END_ID(Effect)": effect,
-            "type": relation,
+            "type": edge_type((ingredient, effect)),
             "evidence_type": "pubmed_evidence",
             "graph_score:float": round(math.log1p(sum(by_paper.values())), 6),
             "paper_count:int": len(by_paper),
         }
-        for (ingredient, effect, relation), by_paper in support_by_edge.items()
+        for (ingredient, effect), by_paper in support_by_edge.items()
     ]
     rows.sort(
         key=lambda row: (
@@ -685,6 +762,7 @@ def retain_legacy_affects(
     valid_ingredient_ids: set[str],
     valid_effects: set[str],
     current_keys: set[tuple[str, str, str]],
+    reevaluated_ingredients: frozenset[str] | set[str] = frozenset(),
 ) -> list[dict]:
     """기존 관계 중 유효한 것만 보존한다. 출처가 모호한 세라마이드 NP 논문 관계는 제외한다."""
     return [
@@ -700,6 +778,12 @@ def retain_legacy_affects(
         # 확인할 수 없다. 특정 종의 논문 관계로 재사용하지 않는다.
         and not (
             str(row.get(":START_ID(Ingredient)", "")) == "CERAMIDE NP"
+            and str(row.get("evidence_type", "")) == "pubmed_evidence"
+        )
+        # 현재 claim 배치에서 다시 판정한 성분의 과거 논문 관계는 PMID가 없어
+        # 검증할 수 없고, 새 gate가 걸러낸 관계를 되살린다.
+        and not (
+            str(row.get(":START_ID(Ingredient)", "")) in reevaluated_ingredients
             and str(row.get("evidence_type", "")) == "pubmed_evidence"
         )
     ]
@@ -856,11 +940,13 @@ def main(
             except Exception:
                 pass
 
+    evaluated_ingredients: set[str] = set()
     pubmed_rows = load_affects_rows(
         effect_id_to_code,
         inci_lookup,
         since=since,
         claim_batch_id=claim_batch_id,
+        evaluated_ingredients=evaluated_ingredients,
     )
 
     # ── COSING soft 엣지 (pubmed 엣지가 없는 성분·효과 쌍 보완) ──────────
@@ -888,7 +974,7 @@ def main(
         }
         retained_legacy = retain_legacy_affects(
             legacy_affects.to_dict("records"), valid_ingredient_ids,
-            valid_effects, current_keys,
+            valid_effects, current_keys, evaluated_ingredients,
         )
         affects_rows = retained_legacy + affects_rows
         print(

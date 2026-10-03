@@ -237,6 +237,129 @@ class ClaimBatchSelectionTest(unittest.TestCase):
 
             self.assertEqual([], edges)
 
+    def _salicylic_edges(self, rows: list[dict]) -> list[dict]:
+        base = {
+            "ingredient_name": "Salicylic acid", "concern_ids": "",
+            "eligibility_tier": "soft_graph", "strength_label": "moderate",
+            "significance_label": "unclear", "attribution_label": "single_formulation",
+            "claim_type": "efficacy", "title": "", "study_context": "human_topical",
+            "all_detected_ingredients": "Salicylic acid",
+        }
+        rows = [{**base, **row} for row in rows]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            batch = Path(temp_dir) / "batch=sa"
+            batch.mkdir()
+            with (batch / "gold_claim_all.csv").open("w", encoding="utf-8", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=list(rows[0]))
+                writer.writeheader()
+                writer.writerows(rows)
+            with patch.object(build_gold_csvs, "CLAIM_BATCH_ROOT", Path(temp_dir)):
+                return build_gold_csvs.load_affects_rows(
+                    {2: "SOOTHING", 3: "BARRIER_REPAIR", 4: "HYDRATING",
+                     6: "SEBUM_REGULATION", 7: "KERATOLYTIC"},
+                    {"salicylic acid": "SALICYLIC ACID"},
+                    claim_batch_id="sa",
+                )
+
+    def test_one_sentence_does_not_spread_to_effects_outside_the_claim_target(self) -> None:
+        sentence = (
+            "CONCLUSION: The salicylic acid-containing gel effectively reduces acne "
+            "lesions, regulates sebum production, enhances skin hydration, and "
+            "strengthens the skin barrier."
+        )
+        edges = self._salicylic_edges([
+            {"pmid": "40682377", "relation": "regulates", "target": "sebum production",
+             "effect_ids": "4|6", "source_sentence": sentence, "row_weight": "0.27"},
+            {"pmid": "40682377", "relation": "improves", "target": "hydration",
+             "effect_ids": "2|3|4|6", "source_sentence": sentence, "row_weight": "0.27"},
+        ])
+
+        self.assertEqual(
+            {("SEBUM_REGULATION", "regulates"), ("HYDRATING", "improves")},
+            {(row[":END_ID(Effect)"], row["type"]) for row in edges},
+        )
+
+    def test_tolerability_is_not_emitted_as_an_efficacy_edge(self) -> None:
+        sentence = "Salicylic acid is a tolerable alternative with mild peeling."
+        edges = self._salicylic_edges([
+            {"pmid": "41140645", "relation": "is_well_tolerated_for", "target": "tolerability",
+             "effect_ids": "2|7", "source_sentence": sentence, "row_weight": "0.2"},
+            {"pmid": "42145713", "relation": "improves", "target": "tolerability",
+             "effect_ids": "2", "source_sentence": sentence, "row_weight": "0.27"},
+        ])
+
+        self.assertEqual([], edges)
+
+    def test_relations_of_the_same_effect_share_one_edge(self) -> None:
+        edges = self._salicylic_edges([
+            {"pmid": "100", "relation": "reduces", "target": "sebum",
+             "effect_ids": "6", "source_sentence": "Salicylic acid reduced sebum.",
+             "row_weight": "0.27"},
+            {"pmid": "100", "relation": "regulates", "target": "sebum production",
+             "effect_ids": "6", "source_sentence": "Salicylic acid regulated sebum.",
+             "row_weight": "0.27"},
+            {"pmid": "200", "relation": "improves", "target": "oiliness",
+             "effect_ids": "6", "source_sentence": "Salicylic acid improved oiliness.",
+             "row_weight": "0.48"},
+        ])
+
+        self.assertEqual(1, len(edges))
+        self.assertEqual("improves", edges[0]["type"])
+        self.assertEqual(2, edges[0]["paper_count:int"])
+        self.assertEqual(round(math.log1p(0.27 + 0.48), 6), edges[0]["graph_score:float"])
+
+    def test_legacy_paper_edges_of_reevaluated_ingredients_are_not_restored(self) -> None:
+        def edge(name: str, effect: str, evidence_type: str) -> dict:
+            return {
+                ":START_ID(Ingredient)": name, ":END_ID(Effect)": effect,
+                "type": "regulates", "evidence_type": evidence_type,
+            }
+
+        retained = build_gold_csvs.retain_legacy_affects(
+            [
+                edge("SALICYLIC ACID", "HYDRATING", "pubmed_evidence"),
+                edge("SALICYLIC ACID", "KERATOLYTIC", "cosing_function"),
+                edge("NIACINAMIDE", "HYDRATING", "pubmed_evidence"),
+            ],
+            {"SALICYLIC ACID", "NIACINAMIDE"}, {"HYDRATING", "KERATOLYTIC"}, set(),
+            {"SALICYLIC ACID"},
+        )
+
+        self.assertEqual(
+            [
+                edge("SALICYLIC ACID", "KERATOLYTIC", "cosing_function"),
+                edge("NIACINAMIDE", "HYDRATING", "pubmed_evidence"),
+            ],
+            retained,
+        )
+
+    def test_evaluated_ingredients_include_claims_that_fail_the_gate(self) -> None:
+        evaluated: set[str] = set()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            batch = Path(temp_dir) / "batch=gate"
+            batch.mkdir()
+            row = {
+                "ingredient_name": "Salicylic acid", "relation": "improves",
+                "target": "acne", "effect_ids": "", "concern_ids": "",
+                "eligibility_tier": "recommendation_only", "strength_label": "weak",
+                "significance_label": "unclear", "attribution_label": "multi_active_combination",
+                "claim_type": "efficacy", "source_sentence": "A combination improved acne.",
+                "title": "", "study_context": "unknown",
+                "all_detected_ingredients": "Salicylic acid", "pmid": "1", "row_weight": "0.1",
+            }
+            with (batch / "gold_claim_all.csv").open("w", encoding="utf-8", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=list(row))
+                writer.writeheader()
+                writer.writerow(row)
+            with patch.object(build_gold_csvs, "CLAIM_BATCH_ROOT", Path(temp_dir)):
+                edges = build_gold_csvs.load_affects_rows(
+                    {6: "SEBUM_REGULATION"}, {"salicylic acid": "SALICYLIC ACID"},
+                    claim_batch_id="gate", evaluated_ingredients=evaluated,
+                )
+
+        self.assertEqual([], edges)
+        self.assertEqual({"SALICYLIC ACID"}, evaluated)
+
 
 if __name__ == "__main__":
     unittest.main()
