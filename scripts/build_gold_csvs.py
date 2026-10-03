@@ -496,6 +496,43 @@ def _target_effect_codes(
     return {by_id[i] for i in ids}
 
 
+# 여드름 결과(target이 acne·병변) claim은 기전 효능 동의어에 걸리지 않는다(#49).
+# 사람 대상 여드름 연구만 인정하고, 병변 유형이 명시되면 기전 효능, 아니면
+# 결과 효능 BLEMISH_CARE로 연결한다.
+_ACNE_TARGET = re.compile(r"\bacne\b|\blesions?\b|blemish|pimple|breakout", re.IGNORECASE)
+_ACNE_MENTION = re.compile(r"\bacne\b", re.IGNORECASE)
+_NOT_HUMAN_ACNE = re.compile(
+    r"rosacea|atopic|dermatitis|\bmice\b|\bmouse\b|\brats?\b|\bmurine\b|sebocyte|"
+    r"keratinocyte|in vitro|cell line|ribotype|culture|\bmedium\b",
+    re.IGNORECASE,
+)
+_HUMAN_ACNE_CONTEXTS = frozenset({"unknown", ""})
+_LESION_TYPE = re.compile(
+    r"\b(non[- ]?)?inflam(?:ed|matory)\s+(?:acne\s+)?lesions?|\b(papules?|pustules?)\b|"
+    r"\b(comedon\w*|comedo|blackheads?|whiteheads?)\b",
+    re.IGNORECASE,
+)
+
+
+def _acne_outcome_effects(target: str, sentence: str, title: str, study_context: str) -> set[str] | None:
+    """여드름 결과 claim의 효능. 여드름 결과가 아니면 None, 인정 범위 밖이면 빈 집합."""
+    text = f"{sentence} {title}"
+    if not _ACNE_TARGET.search(target) or not (
+        _ACNE_MENTION.search(target) or _ACNE_MENTION.search(text)
+    ):
+        return None
+    context = study_context.strip().lower()
+    if not (context.startswith("human") or context in _HUMAN_ACNE_CONTEXTS):
+        return set()
+    if _NOT_HUMAN_ACNE.search(text) or _NOT_HUMAN_ACNE.search(target):
+        return set()
+    effects: set[str] = set()
+    for match in _LESION_TYPE.finditer(text):
+        non_inflamed, _, comedonal = match.groups()
+        effects.add("COMEDOLYTIC" if comedonal or non_inflamed else "ANTI_INFLAMMATORY")
+    return effects or {"BLEMISH_CARE"}
+
+
 def load_affects_rows(
     effect_id_to_code: dict[int, str],
     inci_lookup: dict[str, str],
@@ -591,7 +628,10 @@ def load_affects_rows(
     relation_support: dict[tuple[str, str], dict[str, float]] = {}
     unmapped_ingredients: set[str] = set()
     excluded_inci = {"CREAM", "WATER", "MELANIN"}
-    dropped = {"non_efficacy": 0, "effect_not_in_target": 0}
+    # effect_id_to_code는 claim_effect_map에서 오므로 BLEMISH_CARE처럼 claim 매핑이
+    # 없던 효능이 빠져 있다. 여드름 결과 효능은 seed 분류 기준으로 확인한다.
+    known_effect_codes = set(effect_names) | set(effect_id_to_code.values())
+    dropped = {"non_efficacy": 0, "effect_not_in_target": 0, "acne_outcome": 0, "acne_not_human": 0}
 
     for _, claim in eligible.iterrows():
         ingredient_name = str(claim["ingredient_name"])
@@ -617,22 +657,42 @@ def load_affects_rows(
         pmid = str(claim["pmid"])
         row_weight = float(claim.get("row_weight", 0.0) or 0.0)
 
-        for eid_str in effect_ids_raw.split("|"):
-            eid_str = eid_str.strip()
-            if not eid_str or eid_str == "nan":
-                continue
-            try:
-                eid = int(float(eid_str))
-            except ValueError:
-                continue
-            effect_code = effect_id_to_code.get(eid)
-            if not effect_code:
-                print(f"[WARN] effect_id={eid} 를 effect_code로 변환할 수 없습니다.")
-                continue
+        acne_effects = _acne_outcome_effects(
+            target,
+            "" if pd.isna(claim.get("source_sentence")) else str(claim.get("source_sentence")),
+            "" if pd.isna(claim.get("title")) else str(claim.get("title")),
+            "" if pd.isna(claim.get("study_context")) else str(claim.get("study_context")),
+        )
+        if acne_effects is not None:
+            dropped["acne_outcome"] += 1
+            if not acne_effects:
+                dropped["acne_not_human"] += 1
+            effect_codes = sorted(code for code in acne_effects if code in known_effect_codes)
+        else:
+            effect_codes = []
+            for eid_str in effect_ids_raw.split("|"):
+                eid_str = eid_str.strip()
+                if not eid_str or eid_str == "nan":
+                    continue
+                try:
+                    eid = int(float(eid_str))
+                except ValueError:
+                    continue
+                effect_code = effect_id_to_code.get(eid)
+                if not effect_code:
+                    print(f"[WARN] effect_id={eid} 를 effect_code로 변환할 수 없습니다.")
+                    continue
+                effect_codes.append(effect_code)
+
+        for effect_code in effect_codes:
             # 피지 증가 관찰은 SEBUM_REGULATION 추천 효능으로 노출하지 않는다.
             if effect_code == "SEBUM_REGULATION" and relation == "increases":
                 continue
-            if target_effects is not None and effect_code not in target_effects:
+            if (
+                acne_effects is None
+                and target_effects is not None
+                and effect_code not in target_effects
+            ):
                 dropped["effect_not_in_target"] += 1
                 continue
             # 관계(improves/reduces/regulates)별로 엣지를 나누면 같은 논문이
@@ -647,7 +707,9 @@ def load_affects_rows(
         print(f"[WARN] INCI 매핑 실패 ingredient: {sorted(unmapped_ingredients)}")
     print(
         f"[claim] 효능 근거 아님(내약성·안전성) 제외: {dropped['non_efficacy']}행, "
-        f"target과 무관한 효능 매핑 제외: {dropped['effect_not_in_target']}건"
+        f"target과 무관한 효능 매핑 제외: {dropped['effect_not_in_target']}건, "
+        f"여드름 결과 claim {dropped['acne_outcome']}행(사람 대상 여드름 연구 아님 "
+        f"{dropped['acne_not_human']}행)"
     )
 
     def edge_type(key: tuple[str, str]) -> str:

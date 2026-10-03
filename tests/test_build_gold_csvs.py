@@ -333,6 +333,69 @@ class ClaimBatchSelectionTest(unittest.TestCase):
             retained,
         )
 
+    def _acne_edges(self, sentence: str, study_context: str = "human_topical",
+                    target: str = "acne", title: str = "") -> set[tuple[str, int]]:
+        effect_ids = {1: "ANTI_INFLAMMATORY", 3: "BARRIER_REPAIR", 4: "HYDRATING",
+                      6: "SEBUM_REGULATION"}  # 운영처럼 claim_effect_map에 없는 효능은 빠져 있음
+        row = {
+            "ingredient_name": "Salicylic acid", "relation": "reduces", "target": target,
+            "effect_ids": "3|4|6", "concern_ids": "", "eligibility_tier": "strict_graph",
+            "strength_label": "moderate", "significance_label": "unclear",
+            "attribution_label": "single_active", "claim_type": "efficacy",
+            "source_sentence": sentence, "title": title, "study_context": study_context,
+            "all_detected_ingredients": "Salicylic acid", "pmid": "1", "row_weight": "0.6",
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            batch = Path(temp_dir) / "batch=acne"
+            batch.mkdir()
+            with (batch / "gold_claim_all.csv").open("w", encoding="utf-8", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=list(row))
+                writer.writeheader()
+                writer.writerow(row)
+            with patch.object(build_gold_csvs, "CLAIM_BATCH_ROOT", Path(temp_dir)):
+                edges = build_gold_csvs.load_affects_rows(
+                    effect_ids, {"salicylic acid": "SALICYLIC ACID"}, claim_batch_id="acne",
+                )
+        return {(row[":END_ID(Effect)"], row["paper_count:int"]) for row in edges}
+
+    def test_acne_outcome_without_lesion_type_is_blemish_care(self) -> None:
+        edges = self._acne_edges(
+            "Photodynamic therapy combined with 2% salicylic acid reduced the number of "
+            "skin lesions in patients with moderate acne, sebum and hydration."
+        )
+
+        self.assertEqual({("BLEMISH_CARE", 1)}, edges)
+
+    def test_acne_lesion_types_map_to_mechanism_effects(self) -> None:
+        self.assertEqual(
+            {("ANTI_INFLAMMATORY", 1), ("COMEDOLYTIC", 1)},
+            self._acne_edges(
+                "Salicylic acid significantly reduced inflamed lesions after 1 month "
+                "and non-inflamed lesions after 2 months in acne."
+            ),
+        )
+        self.assertEqual(
+            {("COMEDOLYTIC", 1)},
+            self._acne_edges("Salicylic acid reduced comedones in acne patients."),
+        )
+
+    def test_acne_outcome_outside_human_acne_studies_is_not_an_edge(self) -> None:
+        self.assertEqual(set(), self._acne_edges(
+            "Zinc sulfate significantly reduced acne rosacea severity."))
+        self.assertEqual(set(), self._acne_edges(
+            "The gel reduced acne lesions in mice.", study_context="unknown"))
+        self.assertEqual(set(), self._acne_edges(
+            "Salicylic acid improved acne.", study_context="in_vitro"))
+        self.assertEqual(set(), self._acne_edges(
+            "Erythritol inhibited the growth of RTs associated with acne.",
+            study_context="unknown",
+            title="Ribotype-dependent growth inhibition by erythritol in Cutibacterium acnes."))
+
+    def test_non_acne_lesions_keep_target_mapping(self) -> None:
+        self.assertEqual(set(), self._acne_edges(
+            "Zinc gluconate alleviated skin lesion severity in psoriasis patients.",
+            target="skin lesion severity"))
+
     def test_evaluated_ingredients_include_claims_that_fail_the_gate(self) -> None:
         evaluated: set[str] = set()
         with tempfile.TemporaryDirectory() as temp_dir:
