@@ -11,6 +11,8 @@ pysbd
 
 #LLM api
 openai
+# 근거 검수(pipeline/review). 근거 추출 모델(OpenAI)과 분리
+anthropic
 
 # S3 / gold CSV 빌드
 boto3
