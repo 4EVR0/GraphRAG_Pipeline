@@ -30,10 +30,28 @@ class Settings:
 
     # Request control
     request_timeout: int = int(os.getenv("REQUEST_TIMEOUT", "30"))
-    request_sleep: float = float(os.getenv("REQUEST_SLEEP", "0.34"))
+    # NCBI 허용량: API key 없으면 초당 3회, 있으면 초당 10회
+    request_sleep: float = float(
+        os.getenv("REQUEST_SLEEP", "0.11" if os.getenv("NCBI_API_KEY") else "0.34")
+    )
+    request_max_retries: int = int(os.getenv("REQUEST_MAX_RETRIES", "4"))
 
     # PubMed search (per-ingredient PMID cap; raise via SEARCH_LIMIT for larger corpora)
     search_limit: int = int(os.getenv("SEARCH_LIMIT", "50"))
+
+    # PubMed 수집 방식: ingredient(성분별 상위 SEARCH_LIMIT건) | narrow(성분×효능 좁은 검색, 결과 전부)
+    pubmed_collection_mode: str = os.getenv("PUBMED_COLLECTION_MODE", "ingredient")
+    narrow_pairs_csv: str = os.getenv("NARROW_PAIRS_CSV", "config/pubmed_narrow/tier1_pairs.csv")
+    narrow_effect_terms_csv: str = os.getenv(
+        "NARROW_EFFECT_TERMS_CSV", "config/pubmed_narrow/effect_terms.csv"
+    )
+    narrow_ingredient_rules_csv: str = os.getenv(
+        "NARROW_INGREDIENT_RULES_CSV", "config/pubmed_narrow/ingredient_rules.csv"
+    )
+    # 조합당 결과가 이 값 이하면 전부, 넘으면 사람 대상 임상·리뷰로 좁힌 뒤 전부 가져온다
+    narrow_full_fetch_max: int = int(os.getenv("NARROW_FULL_FETCH_MAX", "300"))
+    # 좁힌 뒤에도 넘으면 이 값까지만 가져오고 capped로 기록한다(esearch 상한 9,999)
+    narrow_pair_cap: int = int(os.getenv("NARROW_PAIR_CAP", "5000"))
 
     # Target ingredients (repo-root relative or absolute; see target_ingredients_path)
     target_csv_path: str = os.getenv("TARGET_CSV_PATH", "config/target_ingredients.csv")

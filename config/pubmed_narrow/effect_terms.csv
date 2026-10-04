@@ -1,0 +1,16 @@
+effect_code,skin_specific,terms
+ANTI_INFLAMMATORY,false,anti-inflammatory|inflammation|inflammatory|erythema
+SOOTHING,false,soothing|calming|irritation|sensitive skin|stinging
+BARRIER_REPAIR,true,skin barrier|barrier function|barrier repair|transepidermal water loss|TEWL|stratum corneum
+HYDRATING,false,skin hydration|hydration|moisturizing|moisturization|dry skin|xerosis
+MOISTURE_RETENTION,false,humectant|water retention|corneometer|skin moisture
+SEBUM_REGULATION,true,sebum|sebaceous|seborrhea|oily skin
+ANTIMICROBIAL,false,Cutibacterium acnes|Propionibacterium acnes|antibacterial|antimicrobial|Staphylococcus aureus
+KERATOLYTIC,false,keratolytic|exfoliation|exfoliating|desquamation|corneocyte|hyperkeratosis
+COMEDOLYTIC,true,acne|acne vulgaris|comedone|comedones|comedonal|blackhead|whitehead
+WOUND_HEALING,false,wound healing|re-epithelialization|scar
+DEPIGMENTING,true,hyperpigmentation|melasma|melanin|tyrosinase|lentigines|post-inflammatory hyperpigmentation
+BRIGHTENING,true,skin brightening|skin lightening|skin tone|dullness|whitening
+ANTIOXIDANT,false,antioxidant|oxidative stress|reactive oxygen species|free radical
+PHOTOPROTECTIVE,true,photoprotection|photoprotective|UVB|UVA|sunburn|photodamage
+ANTI_AGING,false,wrinkle|wrinkles|photoaging|skin aging|elasticity|collagen

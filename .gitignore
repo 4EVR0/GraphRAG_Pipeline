@@ -30,6 +30,7 @@ pipeline/gold/**/__pycache__/
 *.csv
 !config/target_ingredients.csv
 !config/adverse_targets.csv
+!config/pubmed_narrow/*.csv
 
 graph_goldlayer_design.md
 graph_goldlayer_design_v2.txt
