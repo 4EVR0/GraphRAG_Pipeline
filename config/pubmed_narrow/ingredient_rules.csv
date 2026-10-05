@@ -1,0 +1,9 @@
+inci_name,rule,reason
+MELANIN,require_topical,몸속 색소. 효능 검색어 melanin과 이름이 같아 생리학 논문이 걸림
+CHOLESTEROL,require_topical,몸속 지질. 혈중 콜레스테롤 논문이 대부분
+PROCOLLAGEN,require_topical,몸속 단백질 전구체. 콜라겐 합성 측정값으로 주로 등장
+GLUCOSE,require_topical,몸속 당. 혈당·대사 논문이 대부분
+ARGININE,require_topical,몸속 아미노산. 대사·NO 생성 논문이 대부분
+DNA,require_topical,몸속 물질. DNA 손상 측정값으로 주로 등장
+SERINE,require_topical,몸속 아미노산. 세린 프로테이스 등 효소명으로 주로 등장
+ALCOHOL,exclude,용매·소독 용도. 효능 근거 대상 아님

@@ -185,6 +185,19 @@ python -m pipeline.bronze.pubmed.run_bronze
 - 성분당 최대 `SEARCH_LIMIT`(기본 50)편 수집
 - 출력: `bronze/pubmed/batch=<id>/paper_raw.csv`
 
+성분 × 효능 좁은 검색(`--mode narrow` 또는 `PUBMED_COLLECTION_MODE=narrow`):
+
+```bash
+python -m pipeline.bronze.pubmed.run_bronze --mode narrow \
+  --skip-pmids-from silver/paper --batch-id narrow_<날짜>
+```
+
+- 상위 N건을 자르지 않고, `config/pubmed_narrow/`의 조합마다 좁게 검색해 결과를 전부 가져옵니다.
+  조합당 300건을 넘으면 사람 대상 임상·리뷰로 좁힌 뒤 전부 가져옵니다.
+- 설정 파일과 규칙은 `config/pubmed_narrow/README.md`를 참고하세요.
+- 추가 출력: `search_log.csv`(조합별 쿼리·건수·좁힘·상한 여부), `pair_pmids.csv`(조합과 PMID 연결)
+- `--search-only`는 검색 기록만 남깁니다(논문 미수집, 건수 확인용).
+
 ### Step 2. Silver — Abstract Chunking
 
 ```bash
