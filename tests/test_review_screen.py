@@ -3,7 +3,7 @@ import unittest
 from types import SimpleNamespace
 
 from pipeline.review.batch import ReviewItem
-from pipeline.review.screen import SCREEN_SCHEMA, screen_cost_usd, screen_one
+from pipeline.review.screen import SCREEN_PROMPT_VERSION, SCREEN_SCHEMA, screen_cost_usd, screen_one
 
 ITEM = ReviewItem("111", "SALICYLIC ACID", "SA gel for acne", "Salicylic acid reduced lesions.")
 
@@ -31,6 +31,20 @@ class ScreenTest(unittest.TestCase):
         self.assertEqual(call["response_format"], {"type": "json_schema", "json_schema": SCREEN_SCHEMA})
         self.assertEqual(call["temperature"], 0.0)
         self.assertIn("Target ingredient: SALICYLIC ACID", call["messages"][1]["content"])
+
+    def test_reasoning_models_get_no_temperature(self) -> None:
+        client = FakeOpenAI(json.dumps({"keep": True, "reason": "ok"}))
+        screen_one(client, ITEM, "gpt-5-mini")
+        self.assertNotIn("temperature", client.calls[0])
+        self.assertGreaterEqual(client.calls[0]["max_completion_tokens"], 1000)
+
+    def test_prompt_version_changes_sha_and_prompt(self) -> None:
+        client = FakeOpenAI(json.dumps({"keep": True, "reason": "ok"}))
+        v1 = screen_one(client, ITEM, "gpt-4o-mini", "evidence-screen-v1")
+        v2 = screen_one(client, ITEM, "gpt-4o-mini")
+        self.assertNotEqual(v1["prompt_sha"], v2["prompt_sha"])
+        self.assertNotEqual(client.calls[0]["messages"][0]["content"], client.calls[1]["messages"][0]["content"])
+        self.assertEqual(v2["prompt_version"], SCREEN_PROMPT_VERSION)
 
     def test_unparseable_or_refused_answer_keeps_the_paper(self) -> None:
         for client, status in ((FakeOpenAI("{oops"), "invalid_json"), (FakeOpenAI(None, refusal="no"), "refusal")):

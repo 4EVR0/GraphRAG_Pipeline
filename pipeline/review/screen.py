@@ -7,8 +7,8 @@ client는 openai.OpenAI()와 같은 인터페이스(chat.completions.create)를 
 import hashlib
 import json
 
-SCREEN_PROMPT_VERSION = "evidence-screen-v1"
-SCREEN_SYSTEM_PROMPT = """You screen PubMed records before a detailed evidence review for a cosmetics recommendation graph.
+SCREEN_PROMPT_VERSION = "evidence-screen-v3"
+SCREEN_SYSTEM_PROMPT_V1 = """You screen PubMed records before a detailed evidence review for a cosmetics recommendation graph.
 
 Keep the record (keep=true) if it might report any outcome of the target ingredient on skin, hair follicles, \
 or a skin condition: a clinical study, case report, review summarizing such outcomes, animal or in vitro study \
@@ -20,6 +20,40 @@ environmental or food studies, chemical synthesis without biological testing, fo
 skin or microbial result, or the ingredient appearing only as a background mention.
 
 When unsure, keep it. Give a one-sentence reason."""
+
+# v1은 "피부 연구인가"만 보고 남겨, 성분이 측정값·다른 물질 이름·부형제로만 나오는 논문까지 남겼다.
+SCREEN_SYSTEM_PROMPT = """You screen PubMed records before a detailed evidence review for a cosmetics recommendation graph.
+
+Keep the record (keep=true) only if the target ingredient itself is used in the study: applied, ingested, \
+injected, or tested as a substance, including as one part of a product, peel, or regimen, or as a comparator \
+or positive control arm. The study must also report an outcome on skin, skin cells, hair follicles, skin \
+microbes, or a skin condition. Clinical studies, case reports, animal and in vitro studies, and reviews \
+that summarize such outcomes all count.
+
+Drop the record (keep=false) when any of these holds:
+- The target is only measured or discussed as a substance the body makes (for example skin melanin, \
+cholesterol in skin lipids, procollagen synthesis by cells, serum glucose), not given as a treatment.
+- The target name only appears inside another term (for example "serine protease", "cyclic adenosine \
+monophosphate", "poly(lactic-co-glycolic acid)", "lactic acid bacteria").
+- The target only serves as a vehicle, solvent, penetration enhancer, or carrier for another active, \
+and no effect of the target itself is reported.
+- The outcome is not on skin (for example gut, lung, kidney, eye, or blood), or the study is an analytical \
+method, environmental, food, or synthesis study without biological testing.
+
+If the record fits none of the drop rules but you are still unsure, keep it. Give a one-sentence reason."""
+
+# v2는 비교 대조·양성 대조로만 쓰인 성분까지 버렸다. 대조군 결과도 판정 대상(comparator_only)이다.
+SCREEN_SYSTEM_PROMPT_V3 = SCREEN_SYSTEM_PROMPT.replace(
+    "If the record fits none of the drop rules",
+    "Being only a comparator, reference compound, or positive control is not a reason to drop: keep the record "
+    "when the target arm or control has a reported result.\n\nIf the record fits none of the drop rules",
+)
+
+SCREEN_PROMPTS = {
+    "evidence-screen-v1": SCREEN_SYSTEM_PROMPT_V1,
+    "evidence-screen-v2": SCREEN_SYSTEM_PROMPT,
+    SCREEN_PROMPT_VERSION: SCREEN_SYSTEM_PROMPT_V3,
+}
 
 SCREEN_SCHEMA = {
     "name": "evidence_screen_result",
@@ -42,8 +76,8 @@ OPENAI_PRICES_PER_MTOK = {
 }
 
 
-def screen_prompt_sha() -> str:
-    payload = json.dumps({"version": SCREEN_PROMPT_VERSION, "system": SCREEN_SYSTEM_PROMPT, "schema": SCREEN_SCHEMA},
+def screen_prompt_sha(version: str = SCREEN_PROMPT_VERSION) -> str:
+    payload = json.dumps({"version": version, "system": SCREEN_PROMPTS[version], "schema": SCREEN_SCHEMA},
                          sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
@@ -52,18 +86,20 @@ def screen_key(pmid: str, ingredient: str, model: str, sha: str) -> tuple[str, s
     return (str(pmid), ingredient.upper(), model, sha)
 
 
-def screen_one(client, item, model: str) -> dict:
+def screen_one(client, item, model: str, version: str = SCREEN_PROMPT_VERSION) -> dict:
     """한 (논문, 성분)을 거른다. 응답을 해석할 수 없으면 남긴다(keep=True)."""
-    sha = screen_prompt_sha()
-    row = {"pmid": item.pmid, "ingredient_inci": item.ingredient, "model": model, "prompt_sha": sha,
-           "keep": True, "reason": "", "status": "ok", "usage": {}}
+    sha = screen_prompt_sha(version)
+    row = {"pmid": item.pmid, "ingredient_inci": item.ingredient, "model": model, "prompt_version": version,
+           "prompt_sha": sha, "keep": True, "reason": "", "status": "ok", "usage": {}}
+    # gpt-5 계열은 temperature 기본값만 받고, 사고 토큰이 출력 한도에 포함된다.
+    reasoning = model.startswith("gpt-5")
+    sampling = {"max_completion_tokens": 4000} if reasoning else {"temperature": 0.0, "max_completion_tokens": 200}
     response = client.chat.completions.create(
         model=model,
-        temperature=0.0,
-        max_completion_tokens=200,
+        **sampling,
         response_format={"type": "json_schema", "json_schema": SCREEN_SCHEMA},
         messages=[
-            {"role": "system", "content": SCREEN_SYSTEM_PROMPT},
+            {"role": "system", "content": SCREEN_PROMPTS[version]},
             {"role": "user", "content": f"Target ingredient: {item.ingredient}\n\n<record>\nTitle: {item.title}\n\n{item.source_text}\n</record>"},
         ],
     )

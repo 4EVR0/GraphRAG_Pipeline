@@ -33,7 +33,14 @@ from pipeline.review.batch import (
     wait,
 )
 from pipeline.review.schema import ACNE_EFFECTS, prompt_sha
-from pipeline.review.screen import screen_cost_usd, screen_key, screen_one, screen_prompt_sha
+from pipeline.review.screen import (
+    SCREEN_PROMPT_VERSION,
+    SCREEN_PROMPTS,
+    screen_cost_usd,
+    screen_key,
+    screen_one,
+    screen_prompt_sha,
+)
 from pipeline.review.validate import judge
 
 SOURCES_FILE = "sources.jsonl"
@@ -166,16 +173,19 @@ def cmd_screen(args) -> None:
 
     import pipeline.common.config.settings  # noqa: F401  .env의 OPENAI_API_KEY를 읽는다
 
-    sha = screen_prompt_sha()
+    sha = screen_prompt_sha(args.prompt_version)
     done = {screen_key(r["pmid"], r["ingredient_inci"], r["model"], r["prompt_sha"])
             for r in read_jsonl(args.out_dir / SCREEN_FILE) if r.get("status") == "ok"}
     items = [i for i in load_items(args.out_dir) if screen_key(i.pmid, i.ingredient, args.model, sha) not in done]
+    if args.pmids:
+        wanted = set(args.pmids.split(","))
+        items = [i for i in items if i.pmid in wanted]
     if args.limit:
         items = items[: args.limit]
-    print(f"[screen] {len(items)} items, model={args.model}")
+    print(f"[screen] {len(items)} items, model={args.model}, prompt={args.prompt_version}")
     client = OpenAI(max_retries=3, timeout=60)
     for item in items:
-        append_jsonl(args.out_dir / SCREEN_FILE, [screen_one(client, item, args.model)])
+        append_jsonl(args.out_dir / SCREEN_FILE, [screen_one(client, item, args.model, args.prompt_version)])
     rows = [r for r in read_jsonl(args.out_dir / SCREEN_FILE) if r["model"] == args.model and r["prompt_sha"] == sha]
     usd = sum(screen_cost_usd(args.model, r["usage"]) for r in rows)
     kept = sum(r["keep"] for r in rows)
@@ -230,7 +240,9 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("screen")
     p.add_argument("--out-dir", type=Path, required=True)
     p.add_argument("--model", default="gpt-4o-mini")
+    p.add_argument("--prompt-version", default=SCREEN_PROMPT_VERSION, choices=sorted(SCREEN_PROMPTS))
     p.add_argument("--limit", type=int, default=None)
+    p.add_argument("--pmids", default=None, help="쉼표로 구분한 PMID만 거른다")
 
     p = sub.add_parser("submit")
     p.add_argument("--out-dir", type=Path, required=True)
