@@ -1,6 +1,7 @@
 """근거 검수 시범 CLI (#49). 결과는 --out-dir(로컬)에만 쓴다.
 
 python -m pipeline.review.run_review fetch-sources --pmids-tsv T --ingredient "SALICYLIC ACID" --out-dir D
+python -m pipeline.review.run_review screen --out-dir D --model gpt-4o-mini [--limit 10]
 python -m pipeline.review.run_review submit --out-dir D --model claude-opus-5-5 --effort high [--limit 10]
 python -m pipeline.review.run_review collect --out-dir D --batch-id msgbatch_...
 python -m pipeline.review.run_review human-sheet --out-dir D --size 30 --strata-tsv T
@@ -32,6 +33,7 @@ from pipeline.review.batch import (
     wait,
 )
 from pipeline.review.schema import ACNE_EFFECTS, prompt_sha
+from pipeline.review.screen import screen_cost_usd, screen_key, screen_one, screen_prompt_sha
 from pipeline.review.validate import judge
 
 SOURCES_FILE = "sources.jsonl"
@@ -39,6 +41,7 @@ BATCHES_FILE = "batches.jsonl"
 JUDGMENTS_FILE = "judgments.jsonl"
 SUMMARIES_FILE = "summaries.jsonl"
 QUEUE_FILE = "human_queue.jsonl"
+SCREEN_FILE = "screen.jsonl"
 
 
 def read_jsonl(path: Path) -> list[dict]:
@@ -158,6 +161,28 @@ def cmd_cost(args) -> None:
         print(line)
 
 
+def cmd_screen(args) -> None:
+    from openai import OpenAI
+
+    import pipeline.common.config.settings  # noqa: F401  .env의 OPENAI_API_KEY를 읽는다
+
+    sha = screen_prompt_sha()
+    done = {screen_key(r["pmid"], r["ingredient_inci"], r["model"], r["prompt_sha"])
+            for r in read_jsonl(args.out_dir / SCREEN_FILE) if r.get("status") == "ok"}
+    items = [i for i in load_items(args.out_dir) if screen_key(i.pmid, i.ingredient, args.model, sha) not in done]
+    if args.limit:
+        items = items[: args.limit]
+    print(f"[screen] {len(items)} items, model={args.model}")
+    client = OpenAI(max_retries=3, timeout=60)
+    for item in items:
+        append_jsonl(args.out_dir / SCREEN_FILE, [screen_one(client, item, args.model)])
+    rows = [r for r in read_jsonl(args.out_dir / SCREEN_FILE) if r["model"] == args.model and r["prompt_sha"] == sha]
+    usd = sum(screen_cost_usd(args.model, r["usage"]) for r in rows)
+    kept = sum(r["keep"] for r in rows)
+    print(f"[screen] total={len(rows)} keep={kept} drop={len(rows) - kept} "
+          f"not_ok={sum(r['status'] != 'ok' for r in rows)} usd={usd:.4f}")
+
+
 def cmd_human_sheet(args) -> None:
     items = load_items(args.out_dir)
     strata = {}
@@ -202,6 +227,11 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--ingredient", required=True)
     p.add_argument("--out-dir", type=Path, required=True)
 
+    p = sub.add_parser("screen")
+    p.add_argument("--out-dir", type=Path, required=True)
+    p.add_argument("--model", default="gpt-4o-mini")
+    p.add_argument("--limit", type=int, default=None)
+
     p = sub.add_parser("submit")
     p.add_argument("--out-dir", type=Path, required=True)
     p.add_argument("--model", required=True)
@@ -239,7 +269,7 @@ def main(argv: list[str] | None = None) -> None:
             pmids = [r["pmid"] for r in csv.DictReader(handle, delimiter="\t")]
         fetch_sources(pmids, args.ingredient, args.out_dir)
     else:
-        {"submit": cmd_submit, "collect": cmd_collect, "cost": cmd_cost,
+        {"screen": cmd_screen, "submit": cmd_submit, "collect": cmd_collect, "cost": cmd_cost,
          "human-sheet": cmd_human_sheet, "agree": cmd_agree}[args.command](args)
 
 
