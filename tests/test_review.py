@@ -16,6 +16,7 @@ from pipeline.review.batch import (
     ReviewItem,
     build_requests,
     collect,
+    run_sync,
     cost_usd,
     custom_id,
     review_key,
@@ -111,6 +112,37 @@ class CollectTest(unittest.TestCase):
         usage = {"input_tokens": 1_000_000, "output_tokens": 1_000_000}
         self.assertAlmostEqual(cost_usd("claude-opus-5-5", usage), 12.0)
         self.assertAlmostEqual(cost_usd("claude-opus-5-5", usage, batch=False), 24.0)
+
+
+class SyncTest(unittest.TestCase):
+    def test_sync_rows_match_batch_shape_and_capture_errors(self) -> None:
+        import anthropic
+        import httpx2
+
+        message = SimpleNamespace(
+            model="claude-sonnet-5-5", stop_reason="end_turn", stop_details=None,
+            content=[SimpleNamespace(type="text", text="{}")],
+            usage=SimpleNamespace(input_tokens=5, output_tokens=7,
+                                  cache_creation_input_tokens=0, cache_read_input_tokens=0),
+        )
+        request = httpx2.Request("POST", "https://example.test/v1/messages")
+        error = anthropic.APIStatusError("bad", response=httpx2.Response(400, request=request), body=None)
+        outcomes = iter([message, error])
+
+        def create(**_params):
+            outcome = next(outcomes)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+        client = SimpleNamespace(messages=SimpleNamespace(create=create))
+        seen = []
+        rows = run_sync(client, [{"custom_id": "a", "params": {}}, {"custom_id": "b", "params": {}}], seen.append)
+        self.assertEqual(rows[0]["result_type"], "succeeded")
+        self.assertEqual(rows[0]["usage"]["output_tokens"], 7)
+        self.assertEqual(rows[1]["result_type"], "errored")
+        self.assertTrue(rows[1]["error"].startswith("400"))
+        self.assertEqual(len(seen), 2)
 
 
 class ValidateTest(unittest.TestCase):

@@ -3,6 +3,7 @@
 python -m pipeline.review.run_review fetch-sources --pmids-tsv T --ingredient "SALICYLIC ACID" --out-dir D
 python -m pipeline.review.run_review screen --out-dir D [--model gpt-5-mini] [--limit 10]
 python -m pipeline.review.run_review submit --out-dir D --model claude-opus-5-5 --effort high [--limit 10]
+python -m pipeline.review.run_review review-sync --out-dir D --gateway baze --model claude-sonnet-5-5 --effort medium [--limit 10]
 python -m pipeline.review.run_review collect --out-dir D --batch-id msgbatch_...
 python -m pipeline.review.run_review human-sheet --out-dir D --size 30 --strata-tsv T
 python -m pipeline.review.run_review agree --out-dir D --human-csv H --model M [--direction-effects acne|all]
@@ -29,6 +30,7 @@ from pipeline.review.batch import (
     cost_usd,
     custom_id,
     review_key,
+    run_sync,
     submit,
     wait,
 )
@@ -50,6 +52,11 @@ JUDGMENTS_FILE = "judgments.jsonl"
 SUMMARIES_FILE = "summaries.jsonl"
 QUEUE_FILE = "human_queue.jsonl"
 SCREEN_FILE = "screen.jsonl"
+# 게이트웨이가 json_schema 출력을 지원하지 않을 때 프롬프트로 형식을 요구한다(검증은 그대로).
+NO_SCHEMA_SUFFIX = (
+    "\n\nRespond with only one JSON object with keys relevant (boolean), needs_fulltext (boolean), "
+    "reason (string), and judgments (array of objects with the fields above). No markdown fences."
+)
 
 
 def read_jsonl(path: Path) -> list[dict]:
@@ -96,14 +103,77 @@ def fetch_sources(pmids: list[str], ingredient: str, out_dir: Path) -> None:
 
 
 def done_keys(out_dir: Path) -> set:
+    """판정을 받은 건. 호출 오류(batch_errored 등)는 다시 보낼 수 있게 뺀다."""
     return {review_key(s["pmid"], s["ingredient_inci"], s["model"], s["prompt_sha"])
-            for s in read_jsonl(out_dir / SUMMARIES_FILE)}
+            for s in read_jsonl(out_dir / SUMMARIES_FILE) if not s["status"].startswith("batch_")}
 
 
-def _client():
+# Batch가 없는 Anthropic 호환 게이트웨이. 키는 .env에서 읽는다.
+GATEWAYS = {
+    "anthropic": {"base_url": None, "key_env": "ANTHROPIC_API_KEY"},
+    "baze": {"base_url": "https://factchat-cloud.mindlogic.ai/v1/gateway/claude", "key_env": "BAZE_API_KEY"},
+}
+
+
+def _client(gateway: str = "anthropic"):
+    import os
+
     import anthropic
 
-    return anthropic.Anthropic()
+    import pipeline.common.config.settings  # noqa: F401  .env를 읽는다
+
+    config = GATEWAYS[gateway]
+    if config["base_url"] is None:
+        return anthropic.Anthropic()
+    key = os.environ.get(config["key_env"])
+    if not key:
+        raise SystemExit(f"{config['key_env']} is not set in .env")
+    # 게이트웨이가 brotli로 압축해 보내는데, Brotli<1.2 환경에서는 SDK의 압축 해제가 실패한다.
+    return anthropic.Anthropic(api_key=key, base_url=config["base_url"], max_retries=3,
+                               default_headers={"Accept-Encoding": "gzip, deflate"})
+
+
+def _judge_rows(out_dir: Path, results: list[dict], model: str, effort: str | None, sha: str, run_id: str) -> None:
+    by_id = {custom_id(item, sha): item for item in load_items(out_dir)}
+    reviewed_at = datetime.now(timezone.utc).isoformat()
+    records, queue, summaries = [], [], []
+    for result in results:
+        item = by_id[result["custom_id"]]
+        r, q, s = judge(item, result, model, sha, reviewed_at)
+        s.update(batch_id=run_id, effort=effort)
+        records += r
+        queue += q
+        summaries.append(s)
+    append_jsonl(out_dir / JUDGMENTS_FILE, records)
+    append_jsonl(out_dir / QUEUE_FILE, queue)
+    append_jsonl(out_dir / SUMMARIES_FILE, summaries)
+    print(f"[judge] papers={len(summaries)} judgments={len(records)} human_queue={len(queue)} "
+          f"quote_failures={sum(s['quote_failures'] for s in summaries)} "
+          f"not_ok={sum(s['status'] != 'ok' for s in summaries)}")
+
+
+def cmd_review_sync(args) -> None:
+    items = load_items(args.out_dir)
+    if args.pmids:
+        wanted = set(args.pmids.split(","))
+        items = [i for i in items if i.pmid in wanted]
+    requests, skipped = build_requests(items, args.model, args.effort, done_keys(args.out_dir))
+    if args.limit:
+        requests = requests[: args.limit]
+    if args.no_schema:
+        for request in requests:
+            request["params"]["output_config"].pop("format", None)
+            if not request["params"]["output_config"]:
+                request["params"].pop("output_config")
+            request["params"]["system"] += NO_SCHEMA_SUFFIX
+    print(f"[review-sync] gateway={args.gateway} {len(requests)} requests, {len(skipped)} already reviewed")
+    if not requests:
+        return
+    run_id = f"sync_{args.gateway}_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')}"
+    results_path = args.out_dir / f"results_{run_id}.jsonl"
+    results = run_sync(_client(args.gateway), requests, on_result=lambda row: append_jsonl(results_path, [row]))
+    _judge_rows(args.out_dir, results, args.model, args.effort, prompt_sha(), run_id)
+    cmd_cost(args)
 
 
 def cmd_submit(args) -> None:
@@ -133,32 +203,22 @@ def cmd_collect(args) -> None:
     wait(client, args.batch_id, poll_seconds=args.poll_seconds)
     results = {r["custom_id"]: r for r in collect(client, args.batch_id)}
     append_jsonl(args.out_dir / f"results_{args.batch_id}.jsonl", list(results.values()))
-    by_id = {custom_id(item, meta["prompt_sha"]): item for item in load_items(args.out_dir)}
-    reviewed_at = datetime.now(timezone.utc).isoformat()
-    records, queue, summaries = [], [], []
-    for cid in meta["custom_ids"]:
-        item = by_id[cid]
-        result = results.get(cid, {"result_type": "missing"})
-        r, q, s = judge(item, result, meta["model"], meta["prompt_sha"], reviewed_at)
-        s.update(batch_id=args.batch_id, effort=meta["effort"])
-        records += r
-        queue += q
-        summaries.append(s)
-    append_jsonl(args.out_dir / JUDGMENTS_FILE, records)
-    append_jsonl(args.out_dir / QUEUE_FILE, queue)
-    append_jsonl(args.out_dir / SUMMARIES_FILE, summaries)
-    print(f"[collect] papers={len(summaries)} judgments={len(records)} human_queue={len(queue)}")
+    ordered = [results.get(cid, {"custom_id": cid, "result_type": "missing"}) for cid in meta["custom_ids"]]
+    _judge_rows(args.out_dir, ordered, meta["model"], meta["effort"], meta["prompt_sha"], args.batch_id)
     cmd_cost(args)
 
 
 def cmd_cost(args) -> None:
     by_model: dict[tuple, dict] = defaultdict(lambda: defaultdict(float))
     for s in read_jsonl(args.out_dir / SUMMARIES_FILE):
+        if s["status"].startswith("batch_"):
+            continue  # 호출 오류는 과금되지 않는다
         acc = by_model[(s["model"], s.get("effort"))]
         acc["papers"] += 1
         for k, v in (s.get("usage") or {}).items():
             acc[k] += v
-        acc["usd"] += cost_usd(s["model"], s.get("usage") or {}) if s.get("usage") else 0.0
+        batch = not str(s.get("batch_id") or "").startswith("sync_")  # 게이트웨이 동기 호출은 할인 없음
+        acc["usd"] += cost_usd(s["model"], s.get("usage") or {}, batch=batch) if s.get("usage") else 0.0
     for (model, effort), acc in sorted(by_model.items()):
         per_paper = acc["usd"] / acc["papers"] if acc["papers"] else 0.0
         line = (f"[cost] {model} effort={effort} papers={int(acc['papers'])} "
@@ -253,6 +313,15 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--pmids", default=None, help="쉼표로 구분한 PMID만 제출")
     p.add_argument("--dry-run", action="store_true")
 
+    p = sub.add_parser("review-sync")
+    p.add_argument("--out-dir", type=Path, required=True)
+    p.add_argument("--gateway", choices=sorted(GATEWAYS), default="baze")
+    p.add_argument("--model", default="claude-sonnet-5-5")
+    p.add_argument("--effort", default="medium")
+    p.add_argument("--limit", type=int, default=None)
+    p.add_argument("--pmids", default=None)
+    p.add_argument("--no-schema", action="store_true", help="json_schema 출력을 끄고 프롬프트로 JSON을 요구한다")
+
     p = sub.add_parser("collect")
     p.add_argument("--out-dir", type=Path, required=True)
     p.add_argument("--batch-id", required=True)
@@ -282,7 +351,7 @@ def main(argv: list[str] | None = None) -> None:
             pmids = [r["pmid"] for r in csv.DictReader(handle, delimiter="\t")]
         fetch_sources(pmids, args.ingredient, args.out_dir)
     else:
-        {"screen": cmd_screen, "submit": cmd_submit, "collect": cmd_collect, "cost": cmd_cost,
+        {"screen": cmd_screen, "submit": cmd_submit, "review-sync": cmd_review_sync, "collect": cmd_collect, "cost": cmd_cost,
          "human-sheet": cmd_human_sheet, "agree": cmd_agree}[args.command](args)
 
 

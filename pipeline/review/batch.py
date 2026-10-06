@@ -97,23 +97,44 @@ def _usage_dict(usage) -> dict:
     return {name: int(getattr(usage, name, 0) or 0) for name in fields}
 
 
+def message_fields(message) -> dict:
+    stop_details = getattr(message, "stop_details", None)
+    return {
+        "model": message.model,
+        "stop_reason": message.stop_reason,
+        "refusal_category": getattr(stop_details, "category", None) if stop_details else None,
+        "text": next((b.text for b in message.content if b.type == "text"), ""),
+        "usage": _usage_dict(message.usage),
+    }
+
+
+def run_sync(client, requests: list[dict], on_result=None) -> list[dict]:
+    """Batch가 없는 게이트웨이용: 요청을 한 건씩 보내고 Batch 결과와 같은 형식으로 돌려준다."""
+    import anthropic
+
+    rows = []
+    for request in requests:
+        row = {"custom_id": request["custom_id"], "batch_id": None}
+        try:
+            message = client.messages.create(**request["params"])
+            row.update(result_type="succeeded", **message_fields(message))
+        except anthropic.APIStatusError as exc:
+            row.update(result_type="errored", error=f"{exc.status_code}: {str(exc)[:500]}")
+        except anthropic.APIConnectionError as exc:
+            row.update(result_type="errored", error=f"connection: {exc}")
+        rows.append(row)
+        if on_result:
+            on_result(row)
+    return rows
+
+
 def collect(client, batch_id: str) -> list[dict]:
     """결과를 custom_id 기준 레코드로 바꾼다. 결과 순서는 보장되지 않는다."""
     rows = []
     for result in client.messages.batches.results(batch_id):
         row = {"custom_id": result.custom_id, "batch_id": batch_id, "result_type": result.result.type}
         if result.result.type == "succeeded":
-            message = result.result.message
-            stop_details = getattr(message, "stop_details", None)
-            row.update(
-                {
-                    "model": message.model,
-                    "stop_reason": message.stop_reason,
-                    "refusal_category": getattr(stop_details, "category", None) if stop_details else None,
-                    "text": next((b.text for b in message.content if b.type == "text"), ""),
-                    "usage": _usage_dict(message.usage),
-                }
-            )
+            row.update(message_fields(result.result.message))
         elif result.result.type == "errored":
             row["error"] = str(getattr(result.result, "error", ""))
         rows.append(row)
