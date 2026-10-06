@@ -3,6 +3,7 @@
 - 응답 거절·잘림·JSON 오류는 사람 검수 큐로 보낸다.
 - 허용값이 아니거나 인용 문장이 원문에 없으면 그 판정을 사람 검수 큐로 보낸다.
 """
+import html
 import json
 import re
 import unicodedata
@@ -32,8 +33,8 @@ _PUNCT = str.maketrans({
 
 
 def normalize(text: str) -> str:
-    """대조용 정규화: 유니코드 호환 형태, 따옴표·대시 통일, 공백 축약."""
-    text = unicodedata.normalize("NFKC", text or "").translate(_PUNCT)
+    """대조용 정규화: HTML 엔티티 해제(PubMed 초록의 &lt; 등), 유니코드 호환 형태, 따옴표·대시 통일, 공백 축약."""
+    text = unicodedata.normalize("NFKC", html.unescape(text or "")).translate(_PUNCT)
     return re.sub(r"\s+", " ", text).strip()
 
 
