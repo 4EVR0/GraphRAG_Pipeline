@@ -1,7 +1,7 @@
 """근거 검수 시범 CLI (#49). 결과는 --out-dir(로컬)에만 쓴다.
 
 python -m pipeline.review.run_review fetch-sources --pmids-tsv T --ingredient "SALICYLIC ACID" --out-dir D
-python -m pipeline.review.run_review screen --out-dir D --model gpt-4o-mini [--limit 10]
+python -m pipeline.review.run_review screen --out-dir D [--model gpt-5-mini] [--limit 10]
 python -m pipeline.review.run_review submit --out-dir D --model claude-opus-5-5 --effort high [--limit 10]
 python -m pipeline.review.run_review collect --out-dir D --batch-id msgbatch_...
 python -m pipeline.review.run_review human-sheet --out-dir D --size 30 --strata-tsv T
@@ -34,6 +34,7 @@ from pipeline.review.batch import (
 )
 from pipeline.review.schema import ACNE_EFFECTS, prompt_sha
 from pipeline.review.screen import (
+    DEFAULT_SCREEN_MODEL,
     SCREEN_PROMPT_VERSION,
     SCREEN_PROMPTS,
     screen_cost_usd,
@@ -239,7 +240,7 @@ def main(argv: list[str] | None = None) -> None:
 
     p = sub.add_parser("screen")
     p.add_argument("--out-dir", type=Path, required=True)
-    p.add_argument("--model", default="gpt-4o-mini")
+    p.add_argument("--model", default=DEFAULT_SCREEN_MODEL)
     p.add_argument("--prompt-version", default=SCREEN_PROMPT_VERSION, choices=sorted(SCREEN_PROMPTS))
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--pmids", default=None, help="쉼표로 구분한 PMID만 거른다")

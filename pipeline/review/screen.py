@@ -7,7 +7,9 @@ client는 openai.OpenAI()와 같은 인터페이스(chat.completions.create)를 
 import hashlib
 import json
 
-SCREEN_PROMPT_VERSION = "evidence-screen-v3"
+# 2026-10-06 비교(500건 표본)로 gpt-5-mini + v2를 기본으로 정했다.
+SCREEN_PROMPT_VERSION = "evidence-screen-v2"
+DEFAULT_SCREEN_MODEL = "gpt-5-mini"
 SCREEN_SYSTEM_PROMPT_V1 = """You screen PubMed records before a detailed evidence review for a cosmetics recommendation graph.
 
 Keep the record (keep=true) if it might report any outcome of the target ingredient on skin, hair follicles, \
@@ -42,7 +44,7 @@ method, environmental, food, or synthesis study without biological testing.
 
 If the record fits none of the drop rules but you are still unsure, keep it. Give a one-sentence reason."""
 
-# v2는 비교 대조·양성 대조로만 쓰인 성분까지 버렸다. 대조군 결과도 판정 대상(comparator_only)이다.
+# gpt-4o-mini + v2가 비교 대조·양성 대조 성분을 버려 문장을 더했으나, gpt-4o-mini에서는 효과가 없었다(비교 기록용).
 SCREEN_SYSTEM_PROMPT_V3 = SCREEN_SYSTEM_PROMPT.replace(
     "If the record fits none of the drop rules",
     "Being only a comparator, reference compound, or positive control is not a reason to drop: keep the record "
@@ -52,7 +54,7 @@ SCREEN_SYSTEM_PROMPT_V3 = SCREEN_SYSTEM_PROMPT.replace(
 SCREEN_PROMPTS = {
     "evidence-screen-v1": SCREEN_SYSTEM_PROMPT_V1,
     "evidence-screen-v2": SCREEN_SYSTEM_PROMPT,
-    SCREEN_PROMPT_VERSION: SCREEN_SYSTEM_PROMPT_V3,
+    "evidence-screen-v3": SCREEN_SYSTEM_PROMPT_V3,
 }
 
 SCREEN_SCHEMA = {
