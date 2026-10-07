@@ -214,6 +214,10 @@ class EffectQuoteTest(unittest.TestCase):
         self.assertTrue(effect_in_quote("DEPIGMENTING", "MASI fell by 40%."))
         self.assertTrue(effect_in_quote("SEBUM_REGULATION", "SSL amount significantly decreased."))
         self.assertFalse(effect_in_quote("BLEMISH_CARE", "MASI fell by 40%."))
+        # 여드름 논문의 MAS는 Michaëlsson acne score(기미 MASI와 다름)
+        self.assertTrue(effect_in_quote("BLEMISH_CARE", "No significant difference in MAS between peels."))
+        self.assertTrue(effect_in_quote("BLEMISH_CARE", "Efficacy was higher for TLC and ASI."))
+        self.assertTrue(effect_in_quote("DEPIGMENTING", "PAHPI scores decreased."))
         self.assertFalse(effect_in_quote("HYDRATING", "Acne lesions decreased by 40%."))
         self.assertFalse(effect_in_quote("NOT_AN_EFFECT", "acne"))
 

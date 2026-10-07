@@ -40,13 +40,13 @@ EFFECT_OUTCOME_TERMS = {
     "KERATOLYTIC": r"kerat|exfoliat|desquam|dandruff|flak|scal|peel|rough|smooth|texture|corneocyte|comedo|callus|hyperkeratosis",
     "COMEDOLYTIC": r"comed|non-?inflam|\bnil\b|blackhead|whitehead|lesion|acne",
     "ANTIMICROBIAL": r"bacteri|microb|acnes|aureus|fung|candida|malassezia|dermatophyt|tinea|infect|\bmic\b|inhibition zone|kill|colon",
-    "DEPIGMENTING": r"pigment|melan|melasma|tyrosinase|lentig|spot|masi|dark|hyperchrom|chloasma|freckle",
+    "DEPIGMENTING": r"pigment|melan|melasma|tyrosinase|lentig|spot|masi|pahpi|post-?acne hyperpigment|dark|hyperchrom|chloasma|freckle",
     "BRIGHTENING": r"bright|lighten|whiten|tone|lumin|radian|dull|l\*|pigment|melan|spot",
     "ANTIOXIDANT": r"oxida|radical|ros\b|reactive oxygen|scaveng|glutathione|lipid peroxid|malondialdehyde|sod\b",
     "WOUND_HEALING": r"wound|heal|scar|re-?epitheli|closure|ulcer|repair",
     "ANTI_AGING": r"wrinkl|aging|ageing|elastic|firm|collagen|elastin|fine line|photoag|sag|dermal density|thickness",
     "PHOTOPROTECTIVE": r"uv|sun|photo|spf|erythema|sunburn|radiation|light",
-    "BLEMISH_CARE": r"acne|\bav\b|lesion|blemish|pimple|breakout|comedo|papul|pustul|gags|\bpga\b|ecca|global (acne )?(assessment|grade)|severity",
+    "BLEMISH_CARE": r"acne|\bav\b|lesion|blemish|pimple|breakout|comedo|papul|pustul|gags|\bpga\b|ecca|global (acne )?(assessment|grade)|\bmas\b|\btlc\b|\basi\b|severity",
 }
 
 
