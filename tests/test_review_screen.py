@@ -58,3 +58,114 @@ class ScreenTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BatchTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.items = [ReviewItem("1", "SALICYLIC ACID", "t1", "a1"), ReviewItem("2", "GLYCERIN", "t2", "a2")]
+
+    def test_batch_file_lines_match_sync_body(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        from pipeline.review.screen import screen_request_body, write_batch_file
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "req.jsonl"
+            by_id = write_batch_file(path, self.items + [self.items[0]], "gpt-5-mini")
+            lines = [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(len(lines), 2)
+        self.assertEqual(set(by_id), {l["custom_id"] for l in lines})
+        self.assertEqual(lines[0]["url"], "/v1/chat/completions")
+        self.assertEqual(lines[0]["body"], screen_request_body(self.items[0], "gpt-5-mini"))
+        self.assertNotIn("temperature", lines[0]["body"])
+
+    def test_parse_output_handles_success_refusal_and_errors(self) -> None:
+        from pipeline.review.screen import parse_batch_output, screen_custom_id
+
+        ids = [screen_custom_id(i) for i in self.items]
+        by_id = dict(zip(ids, self.items))
+        ok = {"custom_id": ids[0], "response": {"status_code": 200, "body": {
+            "choices": [{"message": {"content": json.dumps({"keep": False, "reason": "assay"})}}],
+            "usage": {"prompt_tokens": 900, "completion_tokens": 300}}}, "error": None}
+        refused = {"custom_id": ids[1], "response": {"status_code": 200, "body": {
+            "choices": [{"message": {"content": None, "refusal": "no"}}], "usage": {}}}, "error": None}
+        failed = {"custom_id": ids[1], "response": {"status_code": 500, "body": {"error": {"message": "x"}}}, "error": None}
+        unknown = {"custom_id": "other", "response": {"status_code": 200, "body": {}}}
+        rows = parse_batch_output([json.dumps(r) for r in (ok, refused, failed, unknown)] + [""], by_id, "gpt-5-mini")
+        self.assertEqual([(r["keep"], r["status"]) for r in rows],
+                         [(False, "ok"), (True, "refusal"), (True, "batch_error")])
+        self.assertEqual(rows[0]["usage"], {"input_tokens": 900, "output_tokens": 300})
+        self.assertAlmostEqual(screen_cost_usd("gpt-5-mini", rows[0]["usage"], batch=True),
+                               (900 * 0.25 + 300 * 2.0) / 1e6 / 2)
+
+    def test_submit_uploads_file_and_creates_batch(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        from pipeline.review.screen import submit_batch
+
+        calls = {}
+        client = SimpleNamespace(
+            files=SimpleNamespace(create=lambda **kw: calls.setdefault("file", kw) and SimpleNamespace(id="file_1")),
+            batches=SimpleNamespace(create=lambda **kw: calls.setdefault("batch", kw) and SimpleNamespace(id="batch_1")),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "req.jsonl"
+            path.write_text("{}\n", encoding="utf-8")
+            self.assertEqual(submit_batch(client, path), "batch_1")
+        self.assertEqual(calls["file"]["purpose"], "batch")
+        self.assertEqual(calls["batch"], {"input_file_id": "file_1", "endpoint": "/v1/chat/completions",
+                                          "completion_window": "24h"})
+
+
+class PipelineGlueTest(unittest.TestCase):
+    def test_sources_from_bronze_and_screened_only(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        from pipeline.review import run_review
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bronze, out = Path(tmp) / "bronze", Path(tmp) / "out"
+            bronze.mkdir()
+            (bronze / "paper_raw.csv").write_text(
+                "pmid,title,abstract_text\n1,T1,A1\n2,T2,\n", encoding="utf-8-sig")
+            (bronze / "pair_pmids.csv").write_text(
+                "inci_name,effect_code,pmid\nUREA,HYDRATING,1\nUREA,KERATOLYTIC,1\nGLYCERIN,HYDRATING,1\nUREA,HYDRATING,2\n",
+                encoding="utf-8-sig")
+            self.assertEqual(run_review.sources_from_bronze(bronze, out), 2)
+            self.assertEqual(run_review.sources_from_bronze(bronze, out), 0)
+            screen = [
+                {"pmid": "1", "ingredient_inci": "UREA", "model": "gpt-5-mini", "prompt_sha": run_review.screen_prompt_sha(),
+                 "keep": False, "status": "ok"},
+                {"pmid": "1", "ingredient_inci": "UREA", "model": "gpt-5-mini", "prompt_sha": run_review.screen_prompt_sha(),
+                 "keep": True, "status": "ok"},
+                {"pmid": "1", "ingredient_inci": "GLYCERIN", "model": "gpt-5-mini", "prompt_sha": run_review.screen_prompt_sha(),
+                 "keep": True, "status": "batch_error"},
+            ]
+            run_review.append_jsonl(out / run_review.SCREEN_FILE, screen)
+            latest = run_review.latest_screen(out, "gpt-5-mini", run_review.SCREEN_PROMPT_VERSION)
+            self.assertTrue(latest[("1", "UREA")]["keep"])
+            args = SimpleNamespace(out_dir=out, pmids=None, screened_only=True, screen_model="gpt-5-mini",
+                                   screen_version=run_review.SCREEN_PROMPT_VERSION, model="claude-sonnet-5-5",
+                                   effort="medium", limit=None, dry_run=True)
+            with _Capture() as captured:
+                run_review.cmd_submit(args)
+        self.assertIn("[submit] 1 requests", captured.text)
+
+
+class _Capture:
+    def __enter__(self):
+        import contextlib
+        import io
+
+        self._buffer = io.StringIO()
+        self._ctx = contextlib.redirect_stdout(self._buffer)
+        self._ctx.__enter__()
+        return self
+
+    def __exit__(self, *exc):
+        self._ctx.__exit__(*exc)
+        self.text = self._buffer.getvalue()
+        return False

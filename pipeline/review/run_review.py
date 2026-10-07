@@ -1,8 +1,11 @@
 """근거 검수 시범 CLI (#49). 결과는 --out-dir(로컬)에만 쓴다.
 
 python -m pipeline.review.run_review fetch-sources --pmids-tsv T --ingredient "SALICYLIC ACID" --out-dir D
+python -m pipeline.review.run_review sources-from-bronze --bronze-dir B --out-dir D
 python -m pipeline.review.run_review screen --out-dir D [--model gpt-5-mini] [--limit 10]
-python -m pipeline.review.run_review submit --out-dir D --model claude-opus-5-5 --effort high [--limit 10]
+python -m pipeline.review.run_review screen-submit --out-dir D [--model gpt-5-mini] [--limit N] [--dry-run]
+python -m pipeline.review.run_review screen-collect --out-dir D --batch-id batch_...
+python -m pipeline.review.run_review submit --out-dir D --model claude-sonnet-5-5 --effort medium --screened-only [--limit 10]
 python -m pipeline.review.run_review review-sync --out-dir D --gateway baze --model claude-sonnet-5-5 --effort medium [--limit 10]
 python -m pipeline.review.run_review collect --out-dir D --batch-id msgbatch_...
 python -m pipeline.review.run_review human-sheet --out-dir D --size 30 --strata-tsv T
@@ -41,10 +44,14 @@ from pipeline.review.screen import (
     DEFAULT_SCREEN_MODEL,
     SCREEN_PROMPT_VERSION,
     SCREEN_PROMPTS,
+    parse_batch_output,
     screen_cost_usd,
+    screen_custom_id,
     screen_key,
     screen_one,
     screen_prompt_sha,
+    submit_batch,
+    write_batch_file,
 )
 from pipeline.review.validate import judge, quote_in_source
 
@@ -54,6 +61,7 @@ JUDGMENTS_FILE = "judgments.jsonl"
 SUMMARIES_FILE = "summaries.jsonl"
 QUEUE_FILE = "human_queue.jsonl"
 SCREEN_FILE = "screen.jsonl"
+SCREEN_BATCHES_FILE = "screen_batches.jsonl"
 # 게이트웨이가 json_schema 출력을 지원하지 않을 때 프롬프트로 형식을 요구한다(검증은 그대로).
 NO_SCHEMA_SUFFIX = (
     "\n\nRespond with only one JSON object with keys relevant (boolean), needs_fulltext (boolean), "
@@ -180,6 +188,11 @@ def cmd_review_sync(args) -> None:
 
 def cmd_submit(args) -> None:
     items = load_items(args.out_dir)
+    if args.screened_only:
+        screened = latest_screen(args.out_dir, args.screen_model, args.screen_version)
+        # 거르기 결과가 없거나 실패한 건은 보내지 않는다. 남김(keep)만 본 검수로 보낸다.
+        items = [i for i in items if screened.get((i.pmid, i.ingredient.upper()), {}).get("keep")
+                 and screened[(i.pmid, i.ingredient.upper())]["status"] == "ok"]
     if args.pmids:
         wanted = set(args.pmids.split(","))
         items = [i for i in items if i.pmid in wanted]
@@ -290,6 +303,98 @@ def cmd_score(args) -> None:
           f"cosing={'yes' if cosing else 'no'} mfds={'yes' if mfds else 'no'}")
 
 
+def sources_from_bronze(bronze_dir: Path, out_dir: Path) -> int:
+    """narrow 수집 배치(pair_pmids.csv + paper_raw.csv)에서 (논문, 성분) 검수 목록을 만든다."""
+    with open(bronze_dir / "paper_raw.csv", encoding="utf-8-sig", newline="") as handle:
+        papers = {r["pmid"]: r for r in csv.DictReader(handle) if (r.get("abstract_text") or "").strip()}
+    existing = {(r["pmid"], r["ingredient"].upper()) for r in read_jsonl(out_dir / SOURCES_FILE)}
+    rows = []
+    with open(bronze_dir / "pair_pmids.csv", encoding="utf-8-sig", newline="") as handle:
+        for pair in csv.DictReader(handle):
+            key = (pair["pmid"], pair["inci_name"].upper())
+            paper = papers.get(pair["pmid"])
+            if paper is None or key in existing:
+                continue
+            existing.add(key)
+            rows.append({"pmid": pair["pmid"], "ingredient": pair["inci_name"], "title": paper.get("title") or "",
+                         "source_text": paper["abstract_text"], "source": "abstract"})
+    append_jsonl(out_dir / SOURCES_FILE, rows)
+    return len(rows)
+
+
+def _openai_client():
+    from openai import OpenAI
+
+    import pipeline.common.config.settings  # noqa: F401  .env의 OPENAI_API_KEY를 읽는다
+
+    return OpenAI(max_retries=3, timeout=300)
+
+
+def latest_screen(out_dir: Path, model: str, version: str) -> dict[tuple[str, str], dict]:
+    """(PMID, 성분)별 가장 마지막 거르기 결과."""
+    sha = screen_prompt_sha(version)
+    latest = {}
+    for row in read_jsonl(out_dir / SCREEN_FILE):
+        if row["model"] == model and row["prompt_sha"] == sha:
+            latest[(row["pmid"], row["ingredient_inci"].upper())] = row
+    return latest
+
+
+def cmd_screen_submit(args) -> None:
+    done = {k for k, r in latest_screen(args.out_dir, args.model, args.prompt_version).items() if r["status"] == "ok"}
+    pending = {cid for b in read_jsonl(args.out_dir / SCREEN_BATCHES_FILE) if not b.get("collected") for cid in b["custom_ids"]}
+    items = [i for i in load_items(args.out_dir)
+             if (i.pmid, i.ingredient.upper()) not in done and screen_custom_id(i, args.prompt_version) not in pending]
+    if args.limit:
+        items = items[: args.limit]
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+    path = args.out_dir / f"screen_requests_{stamp}.jsonl"
+    by_id = write_batch_file(path, items, args.model, args.prompt_version)
+    print(f"[screen-submit] {len(by_id)} requests → {path.name}, model={args.model}, prompt={args.prompt_version}")
+    if args.dry_run or not by_id:
+        return
+    batch_id = submit_batch(_openai_client(), path)
+    append_jsonl(args.out_dir / SCREEN_BATCHES_FILE, [{
+        "batch_id": batch_id, "model": args.model, "prompt_version": args.prompt_version,
+        "request_file": path.name, "custom_ids": list(by_id), "submitted_at": datetime.now(timezone.utc).isoformat(),
+        "collected": False,
+    }])
+    print(f"[screen-submit] batch_id={batch_id} (노트북을 꺼도 OpenAI 서버에서 처리, 최대 24시간)")
+
+
+def cmd_screen_collect(args) -> None:
+    batches = read_jsonl(args.out_dir / SCREEN_BATCHES_FILE)
+    meta = next(b for b in batches if b["batch_id"] == args.batch_id)
+    if meta.get("collected"):
+        print(f"[screen-collect] {args.batch_id} 이미 수집함")
+        return
+    client = _openai_client()
+    batch = client.batches.retrieve(args.batch_id)
+    counts = getattr(batch, "request_counts", None)
+    print(f"[screen-collect] status={batch.status} counts={counts}")
+    if batch.status != "completed":
+        return
+    lines = []
+    for file_id in (batch.output_file_id, batch.error_file_id):
+        if file_id:
+            lines += client.files.content(file_id).text.splitlines()
+    by_id = {screen_custom_id(i, meta["prompt_version"]): i for i in load_items(args.out_dir)}
+    by_id = {cid: by_id[cid] for cid in meta["custom_ids"] if cid in by_id}
+    rows = parse_batch_output(lines, by_id, meta["model"], meta["prompt_version"])
+    for row in rows:
+        row["batch_id"] = args.batch_id
+    append_jsonl(args.out_dir / SCREEN_FILE, rows)
+    for b in batches:
+        if b["batch_id"] == args.batch_id:
+            b["collected"] = True
+    (args.out_dir / SCREEN_BATCHES_FILE).write_text(
+        "".join(json.dumps(b, ensure_ascii=False) + "\n" for b in batches), encoding="utf-8")
+    missing = len(meta["custom_ids"]) - len(rows)
+    usd = sum(screen_cost_usd(meta["model"], r["usage"], batch=True) for r in rows if r["usage"])
+    print(f"[screen-collect] rows={len(rows)} keep={sum(r['keep'] for r in rows)} "
+          f"not_ok={sum(r['status'] != 'ok' for r in rows)} missing={missing} usd={usd:.4f}")
+
+
 def cmd_human_sheet(args) -> None:
     items = load_items(args.out_dir)
     strata = {}
@@ -345,6 +450,21 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--pmids", default=None, help="쉼표로 구분한 PMID만 거른다")
 
+    p = sub.add_parser("sources-from-bronze")
+    p.add_argument("--bronze-dir", type=Path, required=True)
+    p.add_argument("--out-dir", type=Path, required=True)
+
+    p = sub.add_parser("screen-submit")
+    p.add_argument("--out-dir", type=Path, required=True)
+    p.add_argument("--model", default=DEFAULT_SCREEN_MODEL)
+    p.add_argument("--prompt-version", default=SCREEN_PROMPT_VERSION, choices=sorted(SCREEN_PROMPTS))
+    p.add_argument("--limit", type=int, default=None)
+    p.add_argument("--dry-run", action="store_true")
+
+    p = sub.add_parser("screen-collect")
+    p.add_argument("--out-dir", type=Path, required=True)
+    p.add_argument("--batch-id", required=True)
+
     p = sub.add_parser("submit")
     p.add_argument("--out-dir", type=Path, required=True)
     p.add_argument("--model", required=True)
@@ -352,6 +472,9 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--pmids", default=None, help="쉼표로 구분한 PMID만 제출")
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--screened-only", action="store_true", help="거르기에서 남긴 (논문, 성분)만 제출")
+    p.add_argument("--screen-model", default=DEFAULT_SCREEN_MODEL)
+    p.add_argument("--screen-version", default=SCREEN_PROMPT_VERSION, choices=sorted(SCREEN_PROMPTS))
 
     p = sub.add_parser("review-sync")
     p.add_argument("--out-dir", type=Path, required=True)
@@ -393,12 +516,16 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--prompt-sha", default=None, help="비교할 판정 형식 버전(기본: 현재 프롬프트)")
 
     args = parser.parse_args(argv)
+    if args.command == "sources-from-bronze":
+        print(f"[sources] {sources_from_bronze(args.bronze_dir, args.out_dir)} added")
+        return
     if args.command == "fetch-sources":
         with open(args.pmids_tsv, encoding="utf-8") as handle:
             pmids = [r["pmid"] for r in csv.DictReader(handle, delimiter="\t")]
         fetch_sources(pmids, args.ingredient, args.out_dir)
     else:
-        {"screen": cmd_screen, "submit": cmd_submit, "review-sync": cmd_review_sync, "collect": cmd_collect, "cost": cmd_cost,
+        {"screen": cmd_screen, "screen-submit": cmd_screen_submit, "screen-collect": cmd_screen_collect,
+         "submit": cmd_submit, "review-sync": cmd_review_sync, "collect": cmd_collect, "cost": cmd_cost,
          "human-sheet": cmd_human_sheet, "score": cmd_score, "agree": cmd_agree}[args.command](args)
 
 

@@ -6,6 +6,7 @@ client는 openai.OpenAI()와 같은 인터페이스(chat.completions.create)를 
 """
 import hashlib
 import json
+import re
 
 # 2026-10-06 비교(500건 표본)로 gpt-5-mini + v2를 기본으로 정했다.
 SCREEN_PROMPT_VERSION = "evidence-screen-v2"
@@ -88,38 +89,117 @@ def screen_key(pmid: str, ingredient: str, model: str, sha: str) -> tuple[str, s
     return (str(pmid), ingredient.upper(), model, sha)
 
 
-def screen_one(client, item, model: str, version: str = SCREEN_PROMPT_VERSION) -> dict:
-    """한 (논문, 성분)을 거른다. 응답을 해석할 수 없으면 남긴다(keep=True)."""
-    sha = screen_prompt_sha(version)
-    row = {"pmid": item.pmid, "ingredient_inci": item.ingredient, "model": model, "prompt_version": version,
-           "prompt_sha": sha, "keep": True, "reason": "", "status": "ok", "usage": {}}
+def screen_request_body(item, model: str, version: str = SCREEN_PROMPT_VERSION) -> dict:
+    """chat.completions 요청 본문. 동기 호출과 OpenAI Batch가 같은 본문을 쓴다."""
     # gpt-5 계열은 temperature 기본값만 받고, 사고 토큰이 출력 한도에 포함된다.
     reasoning = model.startswith("gpt-5")
     sampling = {"max_completion_tokens": 4000} if reasoning else {"temperature": 0.0, "max_completion_tokens": 200}
-    response = client.chat.completions.create(
-        model=model,
+    return {
+        "model": model,
         **sampling,
-        response_format={"type": "json_schema", "json_schema": SCREEN_SCHEMA},
-        messages=[
+        "response_format": {"type": "json_schema", "json_schema": SCREEN_SCHEMA},
+        "messages": [
             {"role": "system", "content": SCREEN_PROMPTS[version]},
             {"role": "user", "content": f"Target ingredient: {item.ingredient}\n\n<record>\nTitle: {item.title}\n\n{item.source_text}\n</record>"},
         ],
-    )
-    usage = getattr(response, "usage", None)
-    row["usage"] = {"input_tokens": int(getattr(usage, "prompt_tokens", 0) or 0),
-                    "output_tokens": int(getattr(usage, "completion_tokens", 0) or 0)}
-    message = response.choices[0].message
-    if getattr(message, "refusal", None):
-        row.update(status="refusal", reason=str(message.refusal))
+    }
+
+
+def _base_row(item, model: str, version: str) -> dict:
+    return {"pmid": item.pmid, "ingredient_inci": item.ingredient, "model": model, "prompt_version": version,
+            "prompt_sha": screen_prompt_sha(version), "keep": True, "reason": "", "status": "ok", "usage": {}}
+
+
+def parse_screen_message(row: dict, content: str | None, refusal: str | None, usage: dict) -> dict:
+    """응답 메시지를 거르기 행으로 바꾼다. 해석할 수 없으면 남긴다(keep=True)."""
+    row["usage"] = usage
+    if refusal:
+        row.update(status="refusal", reason=str(refusal))
         return row
     try:
-        payload = json.loads(message.content or "")
+        payload = json.loads(content or "")
         row.update(keep=bool(payload["keep"]), reason=str(payload.get("reason", "")))
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
         row.update(status="invalid_json", reason=str(exc))
     return row
 
 
-def screen_cost_usd(model: str, usage: dict) -> float:
+def screen_one(client, item, model: str, version: str = SCREEN_PROMPT_VERSION) -> dict:
+    """한 (논문, 성분)을 거른다. 응답을 해석할 수 없으면 남긴다(keep=True)."""
+    response = client.chat.completions.create(**screen_request_body(item, model, version))
+    usage = getattr(response, "usage", None)
+    message = response.choices[0].message
+    return parse_screen_message(
+        _base_row(item, model, version), message.content, getattr(message, "refusal", None),
+        {"input_tokens": int(getattr(usage, "prompt_tokens", 0) or 0),
+         "output_tokens": int(getattr(usage, "completion_tokens", 0) or 0)},
+    )
+
+
+# ---------------------------------------------------------------------------
+# OpenAI Batch: 제출 후에는 서버가 처리하므로 노트북을 켜 둘 필요가 없다(최대 24시간, 50% 가격).
+
+BATCH_ENDPOINT = "/v1/chat/completions"
+BATCH_MAX_REQUESTS = 50_000
+
+
+def screen_custom_id(item, version: str = SCREEN_PROMPT_VERSION) -> str:
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", item.ingredient).strip("-")[:40]
+    return f"{item.pmid}_{slug}_{screen_prompt_sha(version)[:8]}"
+
+
+def write_batch_file(path, items, model: str, version: str = SCREEN_PROMPT_VERSION) -> dict[str, object]:
+    """Batch 입력 JSONL을 쓰고 custom_id → item을 돌려준다."""
+    if len(items) > BATCH_MAX_REQUESTS:
+        raise ValueError(f"OpenAI Batch는 한 번에 {BATCH_MAX_REQUESTS}건까지다: {len(items)}")
+    by_id = {}
+    with open(path, "w", encoding="utf-8") as handle:
+        for item in items:
+            cid = screen_custom_id(item, version)
+            if cid in by_id:
+                continue
+            by_id[cid] = item
+            handle.write(json.dumps({"custom_id": cid, "method": "POST", "url": BATCH_ENDPOINT,
+                                     "body": screen_request_body(item, model, version)}, ensure_ascii=False) + "\n")
+    return by_id
+
+
+def submit_batch(client, path) -> str:
+    with open(path, "rb") as handle:
+        uploaded = client.files.create(file=handle, purpose="batch")
+    batch = client.batches.create(input_file_id=uploaded.id, endpoint=BATCH_ENDPOINT, completion_window="24h")
+    return batch.id
+
+
+def parse_batch_output(lines: list[str], by_id: dict, model: str, version: str = SCREEN_PROMPT_VERSION) -> list[dict]:
+    """Batch 출력·오류 파일의 줄을 거르기 행으로 바꾼다. 실패한 요청은 status=batch_error로 남긴다(남김 처리)."""
+    rows = []
+    for line in lines:
+        if not line.strip():
+            continue
+        result = json.loads(line)
+        item = by_id.get(result.get("custom_id"))
+        if item is None:
+            continue
+        row = _base_row(item, model, version)
+        response = result.get("response") or {}
+        body = response.get("body") or {}
+        if result.get("error") or response.get("status_code") != 200 or not body.get("choices"):
+            error = result.get("error") or body.get("error") or {"status_code": response.get("status_code")}
+            row.update(status="batch_error", reason=json.dumps(error, ensure_ascii=False)[:300])
+            rows.append(row)
+            continue
+        message = body["choices"][0].get("message") or {}
+        usage = body.get("usage") or {}
+        rows.append(parse_screen_message(
+            row, message.get("content"), message.get("refusal"),
+            {"input_tokens": int(usage.get("prompt_tokens") or 0),
+             "output_tokens": int(usage.get("completion_tokens") or 0)},
+        ))
+    return rows
+
+
+def screen_cost_usd(model: str, usage: dict, batch: bool = False) -> float:
     input_price, output_price = OPENAI_PRICES_PER_MTOK[model]
-    return (usage.get("input_tokens", 0) * input_price + usage.get("output_tokens", 0) * output_price) / 1_000_000
+    cost = (usage.get("input_tokens", 0) * input_price + usage.get("output_tokens", 0) * output_price) / 1_000_000
+    return cost * (0.5 if batch else 1.0)
