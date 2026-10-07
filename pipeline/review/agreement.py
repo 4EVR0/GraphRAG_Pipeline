@@ -2,6 +2,8 @@
 
 논문 단위로 비교한다. 모델 판정이 여러 개면 다수결 값을 논문 값으로 쓴다.
 사람 라벨이 비어 있는 칸은 비교에서 뺀다. 값 끝의 *는 접두어 일치를 뜻한다(topical* 등).
+성분 귀속·적용 형태는 사람과 모델이 모두 관련 있다고 본 논문에서만 비교한다
+(관련 없는 논문에서 모델은 판정을 내지 않아 none이 되므로, 비교하면 실제 의견 차이가 아닌 불일치가 생긴다).
 """
 import csv
 import random
@@ -9,6 +11,7 @@ from collections import Counter
 from pathlib import Path
 
 FIELDS = ("relevant", "attribution", "route", "direction")
+RELEVANT_ONLY_FIELDS = frozenset({"attribution", "route"})
 HUMAN_COLUMNS = ("human_relevant", "human_attribution", "human_route", "human_direction", "human_effect_codes", "human_note")
 NONE = "none"
 
@@ -50,6 +53,9 @@ def agreement(human_rows: list[dict], model_labels: dict[str, dict]) -> dict:
             (row[f"human_{field}"], model_labels[row["pmid"]][field])
             for row in human_rows
             if (row.get(f"human_{field}") or "").strip() and row["pmid"] in model_labels
+            and (field not in RELEVANT_ONLY_FIELDS
+                 or ((row.get("human_relevant") or "").strip().lower() == "yes"
+                     and model_labels[row["pmid"]]["relevant"] == "yes"))
         ]
         matched = sum(_match(h, m) for h, m in pairs)
         out[field] = {"matched": matched, "n": len(pairs), "rate": round(matched / len(pairs), 4) if pairs else None,

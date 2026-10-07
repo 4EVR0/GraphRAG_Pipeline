@@ -256,6 +256,20 @@ class AgreementTest(unittest.TestCase):
         self.assertEqual(report["direction"]["rate"], 1.0)
         self.assertEqual(report["effect_codes_jaccard"], {"n": 2, "mean": 0.75})
 
+    def test_attribution_and_route_compared_only_when_both_relevant(self) -> None:
+        labels = {
+            "1": {"relevant": "no", "attribution": "none", "route": "none", "direction": "none", "effect_codes": ""},
+            "2": {"relevant": "yes", "attribution": "single", "route": "peel", "direction": "improves", "effect_codes": ""},
+        }
+        human = [
+            {"pmid": "1", "human_relevant": "no", "human_attribution": "single", "human_route": "topical_rinse_off"},
+            {"pmid": "2", "human_relevant": "yes", "human_attribution": "single", "human_route": "procedure"},
+        ]
+        report = agreement(human, labels)
+        self.assertEqual((report["attribution"]["matched"], report["attribution"]["n"]), (1, 1))
+        self.assertEqual((report["route"]["matched"], report["route"]["n"]), (0, 1))
+        self.assertEqual(report["relevant"]["rate"], 1.0)
+
     def test_sample_is_stratified_and_deterministic(self) -> None:
         papers = [{"pmid": str(i), "title": "", "source_text": "", "stratum": "true" if i < 40 else "false"}
                   for i in range(100)]

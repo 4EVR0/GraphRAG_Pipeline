@@ -305,11 +305,13 @@ def cmd_human_sheet(args) -> None:
 
 
 def cmd_agree(args) -> None:
+    # 판정 형식 버전이 여럿이면 섞이지 않게 prompt_sha 하나만 쓴다(기본: 현재 버전).
+    sha = args.prompt_sha or prompt_sha()
     summaries = {s["pmid"]: s for s in read_jsonl(args.out_dir / SUMMARIES_FILE)
-                 if s["model"] == args.model and s.get("status") == "ok"}
+                 if s["model"] == args.model and s.get("status") == "ok" and s["prompt_sha"] == sha}
     records = defaultdict(list)
     for r in read_jsonl(args.out_dir / JUDGMENTS_FILE):
-        if r["model"] == args.model and r["pmid"] in summaries:
+        if r["model"] == args.model and r["prompt_sha"] == sha and r["pmid"] in summaries:
             records[r["pmid"]].append(r)
     effects = ACNE_EFFECTS if args.direction_effects == "acne" else None
     labels = {pmid: paper_labels(s, records[pmid], effects) for pmid, s in summaries.items()}
@@ -319,6 +321,8 @@ def cmd_agree(args) -> None:
         round(sum(not r["quote_verified"] for r in all_records) / len(all_records), 4) if all_records else None
     )
     report["model"] = args.model
+    report["prompt_sha"] = sha
+    report["papers_compared"] = len(summaries)
     out = args.out_dir / f"agreement_{args.model}_{Path(args.human_csv).stem}.json"
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps({k: (v if not isinstance(v, dict) else {kk: vv for kk, vv in v.items() if kk != "mismatches"})
@@ -386,6 +390,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--human-csv", type=Path, required=True)
     p.add_argument("--model", required=True)
     p.add_argument("--direction-effects", choices=("acne", "all"), default="acne")
+    p.add_argument("--prompt-sha", default=None, help="비교할 판정 형식 버전(기본: 현재 프롬프트)")
 
     args = parser.parse_args(argv)
     if args.command == "fetch-sources":
