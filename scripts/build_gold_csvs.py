@@ -854,6 +854,11 @@ def retain_legacy_affects(
     ]
 
 
+def reviewed_ingredient_ids(review_dir: Path) -> set[str]:
+    """검수 출력의 review_ingredients.csv: 논문을 찾아 거르기·검수까지 거친 성분."""
+    return set(pd.read_csv(review_dir / "review_ingredients.csv", dtype=str)["ingredient_inci"].str.upper())
+
+
 def load_review_affects_rows(
     review_dir: Path,
     valid_ingredient_ids: set[str],
@@ -867,9 +872,7 @@ def load_review_affects_rows(
     두 번째 값은 검수한 성분 전체로, 이 성분들의 claim·과거 논문 엣지는 쓰지 않는다.
     """
     edges = pd.read_csv(review_dir / "review_edges.csv", dtype={"ingredient_inci": str, "effect_code": str})
-    reviewed = set(
-        pd.read_csv(review_dir / "review_ingredients.csv", dtype=str)["ingredient_inci"].str.upper()
-    )
+    reviewed = reviewed_ingredient_ids(review_dir)
     rows, skipped = [], {"few_human_papers": 0, "unknown_ingredient": 0, "unknown_effect": 0}
     for edge in edges.itertuples():
         inci, effect = str(edge.ingredient_inci).upper(), str(edge.effect_code)
@@ -1024,11 +1027,15 @@ def main(
             .to_dict("records")
         )
         print(f"[ingredient] 최신 상품 + 기존 graph union: {len(ingredient_rows)}개")
-    write_csv(
-        GOLD_NODES / "ingredient.csv",
-        ["ingredient_id:ID(Ingredient)", "inci_name", "kor_name", "cosing_functions:string[]"],
-        ingredient_rows,
-    )
+    ingredient_columns = ["ingredient_id:ID(Ingredient)", "inci_name", "kor_name", "cosing_functions:string[]"]
+    if review_dir is not None:
+        # 검수한 성분 표시(#49): 서버는 이 성분의 고민 순위를 EVIDENCE_FOR로만 매기고,
+        # 질환을 구분하지 않는 논문 AFFECTS 엣지로는 매기지 않는다.
+        reviewed_ids = reviewed_ingredient_ids(review_dir)
+        for row in ingredient_rows:
+            row["evidence_reviewed:boolean"] = str(str(row["ingredient_id:ID(Ingredient)"]).upper() in reviewed_ids).lower()
+        ingredient_columns.append("evidence_reviewed:boolean")
+    write_csv(GOLD_NODES / "ingredient.csv", ingredient_columns, ingredient_rows)
 
     # ── inci_name 역방향 lookup (소문자 → inci_name) ─────────────────────
     valid_ingredient_ids = {
