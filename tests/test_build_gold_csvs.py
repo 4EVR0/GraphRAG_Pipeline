@@ -426,3 +426,42 @@ class ClaimBatchSelectionTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReviewEdgesTest(unittest.TestCase):
+    def test_review_edges_require_human_papers_and_known_nodes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            pd.DataFrame([
+                {"ingredient_inci": "SALICYLIC ACID", "effect_code": "BLEMISH_CARE", "score": 2.159906,
+                 "paper_count": 43, "human_paper_count": 34},
+                {"ingredient_inci": "MELANIN", "effect_code": "PHOTOPROTECTIVE", "score": 0.06,
+                 "paper_count": 1, "human_paper_count": 0},
+                {"ingredient_inci": "NOT IN GRAPH", "effect_code": "HYDRATING", "score": 1.0,
+                 "paper_count": 3, "human_paper_count": 2},
+                {"ingredient_inci": "UREA", "effect_code": "UNKNOWN", "score": 1.0,
+                 "paper_count": 3, "human_paper_count": 2},
+            ]).to_csv(root / "review_edges.csv", index=False)
+            pd.DataFrame({"ingredient_inci": ["SALICYLIC ACID", "MELANIN", "PROCOLLAGEN", "NOT IN GRAPH"]}).to_csv(
+                root / "review_ingredients.csv", index=False)
+            rows, reviewed = build_gold_csvs.load_review_affects_rows(
+                root, {"SALICYLIC ACID", "MELANIN", "PROCOLLAGEN", "UREA"}, {"BLEMISH_CARE", "PHOTOPROTECTIVE", "HYDRATING"},
+            )
+        self.assertEqual(rows, [{
+            ":START_ID(Ingredient)": "SALICYLIC ACID", ":END_ID(Effect)": "BLEMISH_CARE", "type": "improves",
+            "evidence_type": "pubmed_evidence", "graph_score:float": 2.159906, "paper_count:int": 43,
+        }])
+        # 엣지가 없는 PROCOLLAGEN도 검수한 성분으로 남아 과거 논문 엣지를 되살리지 않는다.
+        self.assertEqual(reviewed, {"SALICYLIC ACID", "MELANIN", "PROCOLLAGEN"})
+
+    def test_reviewed_ingredients_drop_legacy_pubmed_edges(self) -> None:
+        legacy = [
+            {":START_ID(Ingredient)": "PROCOLLAGEN", ":END_ID(Effect)": "ANTI_AGING", "type": "improves",
+             "evidence_type": "pubmed_evidence"},
+            {":START_ID(Ingredient)": "PROCOLLAGEN", ":END_ID(Effect)": "ANTI_AGING", "type": "improves",
+             "evidence_type": "reference_book"},
+        ]
+        kept = build_gold_csvs.retain_legacy_affects(
+            legacy, {"PROCOLLAGEN"}, {"ANTI_AGING"}, set(), {"PROCOLLAGEN"},
+        )
+        self.assertEqual([r["evidence_type"] for r in kept], ["reference_book"])

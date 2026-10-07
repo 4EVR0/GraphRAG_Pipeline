@@ -299,6 +299,10 @@ def cmd_score(args) -> None:
     scored, edges = score_records(records, cosing, mfds)
     write_csv(args.out_dir / "judgments_scored.csv", scored)
     write_csv(args.out_dir / "review_edges.csv", edges)
+    # 논문을 찾아 거르기·검수까지 거친 성분은 엣지가 없어도 '검수함'으로 남겨, 그래프 빌드에서
+    # 과거 논문 엣지를 되살리지 않게 한다. 검색 결과가 0편인 성분은 평가하지 못했으므로 넣지 않는다.
+    reviewed = sorted({r["ingredient"].upper() for r in read_jsonl(args.out_dir / SOURCES_FILE)})
+    write_csv(args.out_dir / "review_ingredients.csv", [{"ingredient_inci": inci} for inci in reviewed])
     used = sum(1 for r in scored if r["weight"] > 0)
     print(f"[score] judgments={len(scored)} weighted>0={used} edges={len(edges)} "
           f"cosing={'yes' if cosing else 'no'} mfds={'yes' if mfds else 'no'}")

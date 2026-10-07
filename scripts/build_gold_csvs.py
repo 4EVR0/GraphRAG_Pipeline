@@ -851,6 +851,46 @@ def retain_legacy_affects(
     ]
 
 
+def load_review_affects_rows(
+    review_dir: Path,
+    valid_ingredient_ids: set[str],
+    valid_effects: set[str],
+    min_human_papers: int = 1,
+) -> tuple[list[dict], set[str]]:
+    """LLM 근거 검수 결과(pipeline/review score 출력) → 논문 AFFECTS 엣지(#49).
+
+    서버는 논문 근거를 다른 근거보다 앞에 두므로, 사람 대상 연구가 min_human_papers편 이상인
+    엣지만 넣는다(시험관·동물만 있는 엣지가 참고 도서·CosIng보다 앞서지 않게).
+    두 번째 값은 검수한 성분 전체로, 이 성분들의 claim·과거 논문 엣지는 쓰지 않는다.
+    """
+    edges = pd.read_csv(review_dir / "review_edges.csv", dtype={"ingredient_inci": str, "effect_code": str})
+    reviewed = set(
+        pd.read_csv(review_dir / "review_ingredients.csv", dtype=str)["ingredient_inci"].str.upper()
+    )
+    rows, skipped = [], {"few_human_papers": 0, "unknown_ingredient": 0, "unknown_effect": 0}
+    for edge in edges.itertuples():
+        inci, effect = str(edge.ingredient_inci).upper(), str(edge.effect_code)
+        if int(edge.human_paper_count) < min_human_papers:
+            skipped["few_human_papers"] += 1
+            continue
+        if inci not in valid_ingredient_ids:
+            skipped["unknown_ingredient"] += 1
+            continue
+        if effect not in valid_effects:
+            skipped["unknown_effect"] += 1
+            continue
+        rows.append({
+            ":START_ID(Ingredient)": inci,
+            ":END_ID(Effect)": effect,
+            "type": "improves",
+            "evidence_type": "pubmed_evidence",
+            "graph_score:float": round(float(edge.score), 6),
+            "paper_count:int": int(edge.paper_count),
+        })
+    print(f"[review] 검수 성분 {len(reviewed)}개, 논문 엣지 {len(rows)}개 (제외 {skipped})")
+    return rows, reviewed & valid_ingredient_ids
+
+
 # ---------------------------------------------------------------------------
 # 메인
 # ---------------------------------------------------------------------------
@@ -862,6 +902,8 @@ def main(
     no_upload: bool = False,
     claim_batch_id: str | None = None,
     refresh_targets: bool = False,
+    review_dir: Path | None = None,
+    review_min_human_papers: int = 1,
 ) -> None:
     print("=" * 60)
     print("Gold CSV 빌드 시작")
@@ -1011,8 +1053,21 @@ def main(
         evaluated_ingredients=evaluated_ingredients,
     )
 
-    # ── COSING soft 엣지 (pubmed 엣지가 없는 성분·효과 쌍 보완) ──────────
     valid_effects = {r["effect_code"] for r in effect_rows}
+    if review_dir is not None:
+        # 검수한 성분은 claim 기반 논문 엣지를 검수 결과로 바꾼다(#49).
+        review_rows, reviewed = load_review_affects_rows(
+            review_dir,
+            {str(row["ingredient_id:ID(Ingredient)"]) for row in ingredient_rows},
+            valid_effects,
+            review_min_human_papers,
+        )
+        kept = [r for r in pubmed_rows if r[":START_ID(Ingredient)"] not in reviewed]
+        print(f"[review] claim 기반 논문 엣지 {len(pubmed_rows)}개 중 검수 성분 {len(pubmed_rows) - len(kept)}개 교체")
+        pubmed_rows = review_rows + kept
+        evaluated_ingredients |= reviewed
+
+    # ── COSING soft 엣지 (pubmed 엣지가 없는 성분·효과 쌍 보완) ──────────
     pubmed_seen: set[tuple] = {
         (r[":START_ID(Ingredient)"], r[":END_ID(Effect)"], r["type"])
         for r in pubmed_rows
@@ -1104,6 +1159,10 @@ if __name__ == "__main__":
                         help="정확히 하나의 Gold claim 배치만 사용")
     parser.add_argument("--no-upload", action="store_true",
                         help="S3 업로드를 건너뜀 (로컬 CSV만 생성)")
+    parser.add_argument("--review-dir", type=Path, default=None,
+                        help="LLM 근거 검수 출력 폴더(review_edges.csv, review_ingredients.csv). 검수한 성분의 논문 엣지를 교체")
+    parser.add_argument("--review-min-human-papers", type=int, default=1,
+                        help="그래프에 넣을 검수 엣지의 최소 사람 대상 논문 수")
     args = parser.parse_args()
     main(
         args.bucket,
@@ -1112,4 +1171,6 @@ if __name__ == "__main__":
         no_upload=args.no_upload,
         claim_batch_id=args.claim_batch_id,
         refresh_targets=args.refresh_targets,
+        review_dir=args.review_dir,
+        review_min_human_papers=args.review_min_human_papers,
     )
