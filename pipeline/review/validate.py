@@ -2,6 +2,7 @@
 
 - 응답 거절·잘림·JSON 오류는 사람 검수 큐로 보낸다.
 - 허용값이 아니거나 인용 문장이 원문에 없으면 그 판정을 사람 검수 큐로 보낸다.
+- 인용 문장에 그 효능의 결과 용어가 있는지는 effect_in_quote로 기록만 한다(점수에서 감점).
 """
 import html
 import json
@@ -12,11 +13,14 @@ from datetime import datetime, timezone
 from pipeline.review.batch import ReviewItem
 from pipeline.review.schema import (
     ATTRIBUTIONS,
+    COMPARISONS,
     DIRECTIONS,
     EFFECT_CODES,
     ROUTES,
+    SIGNIFICANCES,
     SOURCES,
     STUDY_TYPES,
+    effect_in_quote,
 )
 
 _ALLOWED = {
@@ -24,8 +28,12 @@ _ALLOWED = {
     "attribution": ATTRIBUTIONS,
     "route": ROUTES,
     "study_type": STUDY_TYPES,
+    "comparison": COMPARISONS,
+    "significance": SIGNIFICANCES,
     "direction": DIRECTIONS,
 }
+_RECORD_FIELDS = ("effect_code", "attribution", "route", "concentration", "population", "sample_size",
+                  "study_type", "comparison", "significance", "direction", "evidence_quote")
 _PUNCT = str.maketrans({
     "‘": "'", "’": "'", "“": '"', "”": '"',
     "–": "-", "—": "-", "−": "-", " ": " ",
@@ -62,7 +70,8 @@ def judge(
     reviewed_at = reviewed_at or datetime.now(timezone.utc).isoformat()
     summary = {"pmid": item.pmid, "ingredient_inci": item.ingredient, "model": model, "prompt_sha": sha,
                "status": "ok", "relevant": None, "needs_fulltext": None, "reason": "",
-               "judgments": 0, "quote_failures": 0, "invalid_values": 0, "usage": result.get("usage", {})}
+               "judgments": 0, "quote_failures": 0, "invalid_values": 0, "effect_not_in_quote": 0,
+               "usage": result.get("usage", {})}
     if result.get("result_type") != "succeeded":
         summary["status"] = f"batch_{result.get('result_type')}"
         return [], [_human(item, model, sha, summary["status"], result.get("error", ""))], summary
@@ -86,18 +95,23 @@ def judge(
     for judgment in payload.get("judgments", []):
         summary["judgments"] += 1
         bad = [f"{k}={judgment.get(k)!r}" for k, allowed in _ALLOWED.items() if judgment.get(k) not in allowed]
-        quote_ok = quote_in_source(judgment.get("evidence_quote", ""), item.title, item.source_text)
+        size = judgment.get("sample_size")
+        if size is not None and (not isinstance(size, int) or isinstance(size, bool) or size < 0):
+            bad.append(f"sample_size={size!r}")
+        quote = judgment.get("evidence_quote", "")
+        quote_ok = quote_in_source(quote, item.title, item.source_text)
+        effect_ok = effect_in_quote(judgment.get("effect_code", ""), quote)
         record = {
             "pmid": item.pmid,
             "ingredient_inci": item.ingredient,
-            **{k: judgment.get(k) for k in ("effect_code", "attribution", "route", "concentration",
-                                             "population", "study_type", "direction", "evidence_quote")},
+            **{k: judgment.get(k) for k in _RECORD_FIELDS},
             "source": item.source if item.source in SOURCES else "abstract",
             "model": model,
             "prompt_sha": sha,
             "reviewed_at": reviewed_at,
             "human_verdict": None,
             "quote_verified": quote_ok,
+            "effect_in_quote": effect_ok,
             "values_valid": not bad,
         }
         records.append(record)
@@ -106,5 +120,7 @@ def judge(
             queue.append(_human(item, model, sha, "invalid_value", "; ".join(bad)))
         if not quote_ok:
             summary["quote_failures"] += 1
-            queue.append(_human(item, model, sha, "quote_not_in_source", judgment.get("evidence_quote", "")[:300]))
+            queue.append(_human(item, model, sha, "quote_not_in_source", quote[:300]))
+        if not effect_ok:
+            summary["effect_not_in_quote"] += 1
     return records, queue, summary

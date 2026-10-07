@@ -8,6 +8,7 @@ python -m pipeline.review.run_review collect --out-dir D --batch-id msgbatch_...
 python -m pipeline.review.run_review human-sheet --out-dir D --size 30 --strata-tsv T
 python -m pipeline.review.run_review agree --out-dir D --human-csv H --model M [--direction-effects acne|all]
 python -m pipeline.review.run_review cost --out-dir D [--project-papers 10000]
+python -m pipeline.review.run_review score --out-dir D [--cosing-gold CSV] [--mfds CSV] [--model M]
 """
 import argparse
 import csv
@@ -34,7 +35,8 @@ from pipeline.review.batch import (
     submit,
     wait,
 )
-from pipeline.review.schema import ACNE_EFFECTS, prompt_sha
+from pipeline.review.schema import ACNE_EFFECTS, effect_in_quote, prompt_sha
+from pipeline.review.scoring import load_cosing_functions, load_mfds_functional, score_records
 from pipeline.review.screen import (
     DEFAULT_SCREEN_MODEL,
     SCREEN_PROMPT_VERSION,
@@ -44,7 +46,7 @@ from pipeline.review.screen import (
     screen_one,
     screen_prompt_sha,
 )
-from pipeline.review.validate import judge
+from pipeline.review.validate import judge, quote_in_source
 
 SOURCES_FILE = "sources.jsonl"
 BATCHES_FILE = "batches.jsonl"
@@ -254,6 +256,40 @@ def cmd_screen(args) -> None:
           f"not_ok={sum(r['status'] != 'ok' for r in rows)} usd={usd:.4f}")
 
 
+def write_csv(path: Path, rows: list[dict]) -> None:
+    fields = list(dict.fromkeys(k for row in rows for k in row))
+    with open(path, "w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def cmd_score(args) -> None:
+    """판정을 점수 규칙으로 (성분, 효능) 근거 점수로 바꾼다. 그래프에는 쓰지 않는다(shadow)."""
+    ok = {review_key(s["pmid"], s["ingredient_inci"], s["model"], s["prompt_sha"])
+          for s in read_jsonl(args.out_dir / SUMMARIES_FILE) if s["status"] == "ok"}
+    sources = {(r["pmid"], r["ingredient"].upper()): r for r in read_jsonl(args.out_dir / SOURCES_FILE)}
+    records = []
+    for record in read_jsonl(args.out_dir / JUDGMENTS_FILE):
+        if args.model and record["model"] != args.model:
+            continue
+        if review_key(record["pmid"], record["ingredient_inci"], record["model"], record["prompt_sha"]) not in ok:
+            continue
+        src = sources[(record["pmid"], record["ingredient_inci"].upper())]
+        # 이전 판정도 현재 대조 규칙으로 다시 확인한다.
+        record["quote_verified"] = quote_in_source(record["evidence_quote"], src["title"], src["source_text"])
+        record["effect_in_quote"] = effect_in_quote(record["effect_code"], record["evidence_quote"])
+        records.append(record)
+    cosing = load_cosing_functions(args.cosing_gold) if args.cosing_gold else None
+    mfds = load_mfds_functional(args.mfds) if args.mfds else None
+    scored, edges = score_records(records, cosing, mfds)
+    write_csv(args.out_dir / "judgments_scored.csv", scored)
+    write_csv(args.out_dir / "review_edges.csv", edges)
+    used = sum(1 for r in scored if r["weight"] > 0)
+    print(f"[score] judgments={len(scored)} weighted>0={used} edges={len(edges)} "
+          f"cosing={'yes' if cosing else 'no'} mfds={'yes' if mfds else 'no'}")
+
+
 def cmd_human_sheet(args) -> None:
     items = load_items(args.out_dir)
     strata = {}
@@ -331,6 +367,12 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--out-dir", type=Path, required=True)
     p.add_argument("--project-papers", type=int, default=None)
 
+    p = sub.add_parser("score")
+    p.add_argument("--out-dir", type=Path, required=True)
+    p.add_argument("--cosing-gold", type=Path, default=None, help="KCIA↔CosIng Gold CSV(inci_name, cosing_functions)")
+    p.add_argument("--mfds", type=Path, default=None, help="식약처 기능성 고시 원료 CSV(inci_name, function, effect_codes)")
+    p.add_argument("--model", default=None)
+
     p = sub.add_parser("human-sheet")
     p.add_argument("--out-dir", type=Path, required=True)
     p.add_argument("--ingredient", default="SALICYLIC ACID")
@@ -352,7 +394,7 @@ def main(argv: list[str] | None = None) -> None:
         fetch_sources(pmids, args.ingredient, args.out_dir)
     else:
         {"screen": cmd_screen, "submit": cmd_submit, "review-sync": cmd_review_sync, "collect": cmd_collect, "cost": cmd_cost,
-         "human-sheet": cmd_human_sheet, "agree": cmd_agree}[args.command](args)
+         "human-sheet": cmd_human_sheet, "score": cmd_score, "agree": cmd_agree}[args.command](args)
 
 
 if __name__ == "__main__":

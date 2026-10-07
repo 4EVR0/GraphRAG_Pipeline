@@ -35,8 +35,8 @@ ITEM = ReviewItem(
 def _judgment(**overrides) -> dict:
     base = {
         "effect_code": "BLEMISH_CARE", "attribution": "single", "route": "topical_leave_on",
-        "concentration": "2%", "population": "40 adults with acne", "study_type": "rct",
-        "direction": "improves",
+        "concentration": "2%", "population": "40 adults with acne", "sample_size": 40, "study_type": "rct",
+        "comparison": "placebo_or_vehicle", "significance": "significant", "direction": "improves",
         "evidence_quote": "Salicylic acid 2% gel reduced total lesion count by 40% (p<0.01).",
     }
     return {**base, **overrides}
@@ -184,10 +184,38 @@ class ValidateTest(unittest.TestCase):
             self.assertEqual(queue[0]["reason"], reason)
             self.assertEqual(summary["status"], reason)
 
+    def test_effect_not_stated_in_quote_is_flagged_not_queued(self) -> None:
+        payload = {"relevant": True, "needs_fulltext": False, "reason": "",
+                   "judgments": [_judgment(), _judgment(effect_code="HYDRATING")]}
+        records, queue, summary = judge(ITEM, _result(payload), "m", "sha")
+        self.assertEqual([r["effect_in_quote"] for r in records], [True, False])
+        self.assertEqual(queue, [])
+        self.assertEqual(summary["effect_not_in_quote"], 1)
+
+    def test_sample_size_must_be_non_negative_integer(self) -> None:
+        for size, ok in ((None, True), (0, True), (12, True), (-1, False), ("40", False), (True, False)):
+            payload = {"relevant": True, "needs_fulltext": False, "reason": "", "judgments": [_judgment(sample_size=size)]}
+            (record,), _, _ = judge(ITEM, _result(payload), "m", "sha")
+            self.assertEqual(record["values_valid"], ok, size)
+            self.assertEqual(record["sample_size"], size)
+
     def test_needs_fulltext_is_queued(self) -> None:
         payload = {"relevant": True, "needs_fulltext": True, "reason": "abstract too short", "judgments": []}
         _, queue, _ = judge(ITEM, _result(payload), "m", "sha")
         self.assertEqual(queue[0]["reason"], "needs_fulltext")
+
+
+class EffectQuoteTest(unittest.TestCase):
+    def test_abbreviations_and_scales_count(self) -> None:
+        from pipeline.review.schema import effect_in_quote
+
+        self.assertTrue(effect_in_quote("BLEMISH_CARE", "Both agents improved mild-to-moderate AV."))
+        self.assertTrue(effect_in_quote("BLEMISH_CARE", "GAGS scores decreased (P<0.05)."))
+        self.assertTrue(effect_in_quote("DEPIGMENTING", "MASI fell by 40%."))
+        self.assertTrue(effect_in_quote("SEBUM_REGULATION", "SSL amount significantly decreased."))
+        self.assertFalse(effect_in_quote("BLEMISH_CARE", "MASI fell by 40%."))
+        self.assertFalse(effect_in_quote("HYDRATING", "Acne lesions decreased by 40%."))
+        self.assertFalse(effect_in_quote("NOT_AN_EFFECT", "acne"))
 
 
 class AgreementTest(unittest.TestCase):
