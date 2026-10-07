@@ -84,6 +84,34 @@ class RequestTest(unittest.TestCase):
         self.assertFalse(OUTPUT_SCHEMA["properties"]["judgments"]["items"]["additionalProperties"])
 
 
+class SubmitTest(unittest.TestCase):
+    def test_batch_create_is_not_retried(self) -> None:
+        from pipeline.review.batch import submit
+
+        seen = {}
+
+        def with_options(**kwargs):
+            seen["options"] = kwargs
+            create = lambda **kw: seen.setdefault("create", kw) and SimpleNamespace(id="msgbatch_1")
+            return SimpleNamespace(messages=SimpleNamespace(batches=SimpleNamespace(create=create)))
+
+        client = SimpleNamespace(with_options=with_options)
+        self.assertEqual(submit(client, [{"custom_id": "a", "params": {}}]), "msgbatch_1")
+        self.assertEqual(seen["options"], {"max_retries": 0})
+        self.assertEqual(seen["create"], {"requests": [{"custom_id": "a", "params": {}}]})
+
+    def test_clients_ask_for_gzip(self) -> None:
+        import os
+        from unittest import mock
+
+        from pipeline.review import run_review
+
+        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test", "BAZE_API_KEY": "test"}):
+            for gateway in ("anthropic", "baze"):
+                client = run_review._client(gateway)
+                self.assertEqual(client.default_headers["Accept-Encoding"], "gzip, deflate")
+
+
 class CollectTest(unittest.TestCase):
     def test_results_are_keyed_with_usage_and_refusal(self) -> None:
         def message(stop_reason, category=None):

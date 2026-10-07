@@ -77,7 +77,9 @@ def build_requests(
 
 
 def submit(client, requests: list[dict]) -> str:
-    batch = client.messages.batches.create(requests=requests)
+    """Batch 생성은 멱등이 아니다. 응답을 못 받은 채 재시도하면 같은 Batch가 여러 개 생기므로
+    자동 재시도를 끈다. 연결 오류가 나면 batches.list로 생성 여부를 먼저 확인한다."""
+    batch = client.with_options(max_retries=0).messages.batches.create(requests=requests)
     return batch.id
 
 
