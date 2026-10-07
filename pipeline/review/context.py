@@ -5,8 +5,11 @@
 고민마다 맞는 질환의 사람 대상 연구만 세어 (성분, 고민) 점수를 만든다. LLM 호출은 없다.
 
 민감 피부 계열 고민은 '민감함을 고치는 성분'이 아니라 '민감한 피부에 써도 되는 성분'을 뜻한다.
-그래서 민감·아토피 피부에 실제로 바른 연구만 세고(건강한 피부 연구 제외), 자극 우려 성분 목록
-(config/review/sensitive_skin_cautions.csv)에 있는 성분은 근거가 있어도 엣지를 만들지 않는다.
+그래서 민감·아토피 피부에 실제로 바른 연구만 센다(건강한 피부 연구 제외). 자극 우려 성분 목록
+(config/review/sensitive_skin_cautions.csv)은 조치 강도를 나눈다.
+- exclude: 직접 근거나 표시 의무가 있는 성분. 근거가 있어도 엣지를 만들지 않는다.
+- caution: 계열·구성 성분으로 추정한 성분. 엣지는 두고 caution 표시만 단다.
+목록에 없다고 '민감 피부에 안전함' 점수를 주지는 않는다.
 """
 import csv
 import math
@@ -14,7 +17,7 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
-CONTEXT_RULES_VERSION = "condition-context-v2"
+CONTEXT_RULES_VERSION = "condition-context-v3"
 
 # 질환 묶음. 한 판정이 여러 묶음에 들 수 있다(예: 아토피 환자의 건조증).
 CONDITION_PATTERNS = {
@@ -64,22 +67,35 @@ def load_concern_conditions(path: Path) -> dict[str, tuple[frozenset[str], froze
     return table
 
 
-def load_sensitive_cautions(path: Path) -> dict[str, str]:
-    """민감 피부에 권하지 않는 성분 INCI → 분류."""
+CAUTION_ACTIONS = frozenset({"exclude", "caution"})
+
+
+def load_sensitive_cautions(path: Path) -> dict[str, dict[str, str]]:
+    """민감 피부 계열 고민의 자극 우려 성분 INCI → 행(caution_class, action, condition, evidence_scope, ...)."""
+    table = {}
     with open(path, encoding="utf-8-sig", newline="") as handle:
-        return {row["inci_name"].strip().upper(): row["caution_class"] for row in csv.DictReader(handle)}
+        for row in csv.DictReader(handle):
+            if row["action"] not in CAUTION_ACTIONS:
+                raise ValueError(f"{row['inci_name']}: 알 수 없는 조치 {row['action']!r}")
+            table[row["inci_name"].strip().upper()] = row
+    return table
+
+
+def _caution_label(row: dict[str, str] | None) -> str:
+    return f"{row['caution_class']}:{row['evidence_scope']}" if row and row["action"] == "caution" else ""
 
 
 def score_concerns(
     scored: list[dict],
     concern_table: dict[str, tuple[frozenset[str], frozenset[str], bool]],
     titles: dict[str, str] | None = None,
-    cautions: dict[str, str] | None = None,
+    cautions: dict[str, dict[str, str]] | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """판정별 점수(scoring.score_records 출력) → (판정에 질환 표시를 더한 행, (성분, 고민) 근거 행).
 
     고민마다 그 고민의 효능이면서, 사람 대상 연구이고, 인정 질환 묶음에 드는 판정만 센다.
-    같은 논문은 한 번만, 가장 큰 가중치로 센다. 자극 우려 성분은 제외 표시가 된 고민에서 뺀다.
+    같은 논문은 한 번만, 가장 큰 가중치로 센다. 민감 계열 고민에서 exclude 성분은 빼고,
+    caution 성분은 엣지에 caution(분류:근거 범위)을 단다.
     """
     titles = titles or {}
     cautions = cautions or {}
@@ -93,7 +109,7 @@ def score_concerns(
             continue
         inci = (record.get("ingredient_inci") or "").upper()
         for concern, (effects, allowed, exclude_cautions) in concern_table.items():
-            if exclude_cautions and inci in cautions:
+            if exclude_cautions and cautions.get(inci, {}).get("action") == "exclude":
                 continue
             if record.get("effect_code") in effects and conditions & allowed:
                 key = (inci, concern)
@@ -105,6 +121,7 @@ def score_concerns(
          "score": round(math.log1p(sum(papers.values())), 6), "paper_count": len(papers),
          "effects": "|".join(sorted(effects_used[(inci, concern)])),
          "top_pmids": "|".join(sorted(papers, key=papers.get, reverse=True)[:5]),
+         "caution": _caution_label(cautions.get(inci)) if concern_table[concern][2] else "",
          "rules_version": CONTEXT_RULES_VERSION}
         for (inci, concern), papers in by_edge.items()
     ]

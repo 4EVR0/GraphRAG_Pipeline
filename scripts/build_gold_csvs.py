@@ -857,9 +857,14 @@ def retain_legacy_affects(
 SENSITIVE_CAUTIONS_CSV = ROOT / "config" / "review" / "sensitive_skin_cautions.csv"
 
 
-def sensitive_caution_ids(path: Path = SENSITIVE_CAUTIONS_CSV) -> set[str]:
-    """민감 피부에 권하지 않는 성분(#49). 서버가 민감 계열 고민의 비논문 근거 순위에서도 거를 수 있게 노드에 표시한다."""
-    return set(pd.read_csv(path, dtype=str)["inci_name"].str.strip().str.upper())
+def sensitive_caution_actions(path: Path = SENSITIVE_CAUTIONS_CSV) -> dict[str, str]:
+    """민감 피부 계열 고민의 자극 우려 성분(#49) INCI → 조치(exclude|caution).
+
+    서버가 민감 계열 고민의 비논문 근거(도서·CosIng) 순위에서도 exclude는 거르고 caution은 표시할 수 있게
+    노드에 단다.
+    """
+    table = pd.read_csv(path, dtype=str)
+    return dict(zip(table["inci_name"].str.strip().str.upper(), table["action"]))
 
 
 def reviewed_ingredient_ids(review_dir: Path) -> set[str]:
@@ -928,6 +933,8 @@ def load_review_concern_rows(
             "graph_score:float": round(float(e.score), 6),
             "paper_count:int": int(e.paper_count),
             "effects": str(e.effects),
+            # 민감 계열 고민에서 계열·구성 성분으로 추정한 자극 우려(예: retinoid:class_inferred).
+            "caution": "" if pd.isna(getattr(e, "caution", None)) else str(getattr(e, "caution", "")),
         }
         for e in edges.itertuples()
         if str(e.ingredient_inci).upper() in valid_ingredient_ids and str(e.concern_code) in valid_concerns
@@ -1040,12 +1047,12 @@ def main(
         # 검수한 성분 표시(#49): 서버는 이 성분의 고민 순위를 EVIDENCE_FOR로만 매기고,
         # 질환을 구분하지 않는 논문 AFFECTS 엣지로는 매기지 않는다.
         reviewed_ids = reviewed_ingredient_ids(review_dir)
-        caution_ids = sensitive_caution_ids()
+        caution_actions = sensitive_caution_actions()
         for row in ingredient_rows:
             ing_id = str(row["ingredient_id:ID(Ingredient)"]).upper()
             row["evidence_reviewed:boolean"] = str(ing_id in reviewed_ids).lower()
-            row["sensitive_caution:boolean"] = str(ing_id in caution_ids).lower()
-        ingredient_columns += ["evidence_reviewed:boolean", "sensitive_caution:boolean"]
+            row["sensitive_caution"] = caution_actions.get(ing_id, "")
+        ingredient_columns += ["evidence_reviewed:boolean", "sensitive_caution"]
     write_csv(GOLD_NODES / "ingredient.csv", ingredient_columns, ingredient_rows)
 
     # ── inci_name 역방향 lookup (소문자 → inci_name) ─────────────────────
@@ -1184,7 +1191,7 @@ def main(
         write_csv(
             GOLD_EDGES / "evidence_for.csv",
             [":START_ID(Ingredient)", ":END_ID(Concern)", "evidence_type",
-             "graph_score:float", "paper_count:int", "effects"],
+             "graph_score:float", "paper_count:int", "effects", "caution"],
             load_review_concern_rows(
                 review_dir,
                 {str(row["ingredient_id:ID(Ingredient)"]) for row in ingredient_rows},

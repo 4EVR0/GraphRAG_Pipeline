@@ -468,10 +468,11 @@ class ReviewEdgesTest(unittest.TestCase):
 
 
 class ReviewConcernEdgesTest(unittest.TestCase):
-    def test_sensitive_caution_ids_from_config(self) -> None:
-        ids = build_gold_csvs.sensitive_caution_ids()
-        self.assertTrue({"MENTHOL", "RETINOL", "PROPYLENE GLYCOL"} <= ids)
-        self.assertNotIn("PANTHENOL", ids)
+    def test_sensitive_caution_actions_from_config(self) -> None:
+        actions = build_gold_csvs.sensitive_caution_actions()
+        self.assertEqual({actions[k] for k in ("MENTHOL", "RETINOL", "PROPYLENE GLYCOL")}, {"exclude"})
+        self.assertEqual(actions["RETINYL PALMITATE"], "caution")
+        self.assertNotIn("PANTHENOL", actions)
 
     def test_concern_edges_filter_unknown_nodes(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -487,7 +488,7 @@ class ReviewConcernEdgesTest(unittest.TestCase):
             rows = build_gold_csvs.load_review_concern_rows(root, {"SALICYLIC ACID"}, {"ACNE"})
         self.assertEqual(rows, [{
             ":START_ID(Ingredient)": "SALICYLIC ACID", ":END_ID(Concern)": "ACNE", "evidence_type": "pubmed_review",
-            "graph_score:float": 2.1, "paper_count:int": 40, "effects": "BLEMISH_CARE|COMEDOLYTIC",
+            "graph_score:float": 2.1, "paper_count:int": 40, "effects": "BLEMISH_CARE|COMEDOLYTIC", "caution": "",
         }])
 
     def test_seed_has_all_server_concerns(self) -> None:

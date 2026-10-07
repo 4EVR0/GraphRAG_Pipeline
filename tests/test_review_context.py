@@ -60,6 +60,7 @@ class ConcernScoreTest(unittest.TestCase):
             _r(pmid="2", ingredient_inci="GLYCERIN", effect_code="HYDRATING", population="healthy volunteers"),
             _r(pmid="3", ingredient_inci="MENTHOL", effect_code="SOOTHING", population="subjects with sensitive skin"),
             _r(pmid="4", ingredient_inci="UREA", effect_code="HYDRATING", population="children with atopic dermatitis"),
+            _r(pmid="5", ingredient_inci="RETINYL PALMITATE", effect_code="HYDRATING", population="subjects with sensitive skin"),
         ]
         _, edges = score_concerns(records, table, cautions=cautions)
         pairs = {(e["ingredient_inci"], e["concern_code"]) for e in edges}
@@ -69,6 +70,11 @@ class ConcernScoreTest(unittest.TestCase):
         self.assertNotIn(("UREA", "SENSITIVE_SKIN"), pairs)
         # 주의 목록은 민감 계열 고민에만 적용된다.
         self.assertIn(("UREA", "ATOPIC_PRONE"), pairs)
+        # 계열로 추정한 성분은 빼지 않고 표시만 단다.
+        caution = {(e["ingredient_inci"], e["concern_code"]): e["caution"] for e in edges}
+        self.assertEqual(caution[("RETINYL PALMITATE", "SENSITIVE_SKIN")], "retinoid:class_inferred")
+        self.assertEqual(caution[("PANTHENOL", "SENSITIVE_SKIN")], "")
+        self.assertEqual(caution[("UREA", "ATOPIC_PRONE")], "")
 
     def test_cautions_have_reason_and_source(self) -> None:
         import csv
@@ -76,7 +82,11 @@ class ConcernScoreTest(unittest.TestCase):
             rows = list(csv.DictReader(handle))
         self.assertTrue(rows)
         for row in rows:
-            self.assertTrue(row["reason"].strip() and row["source"].strip(), row["inci_name"])
+            self.assertTrue(row["reason"].strip() and row["source"].strip() and row["evidence_scope"].strip(),
+                            row["inci_name"])
+            # 계열·구성 성분 추정만으로는 제외하지 않는다.
+            if "inferred" in row["evidence_scope"]:
+                self.assertEqual(row["action"], "caution", row["inci_name"])
 
     def test_config_covers_server_concerns(self) -> None:
         table = load_concern_conditions(CONFIG)
