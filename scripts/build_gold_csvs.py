@@ -857,14 +857,17 @@ def retain_legacy_affects(
 SENSITIVE_CAUTIONS_CSV = ROOT / "config" / "review" / "sensitive_skin_cautions.csv"
 
 
-def sensitive_caution_actions(path: Path = SENSITIVE_CAUTIONS_CSV) -> dict[str, str]:
-    """민감 피부 계열 고민의 자극 우려 성분(#49) INCI → 조치(exclude|caution).
+def sensitive_caution_actions(path: Path = SENSITIVE_CAUTIONS_CSV) -> dict[str, tuple[str, str]]:
+    """민감 피부 계열 고민의 자극 우려 성분(#49) INCI → (조치 exclude|caution, 완화 고민 목록 ';' 구분).
 
     서버가 민감 계열 고민의 비논문 근거(도서·CosIng) 순위에서도 exclude는 거르고 caution은 표시할 수 있게
-    노드에 단다.
+    노드에 단다. 완화 고민(예: 여드름 계열)을 함께 요청하면 exclude 성분도 빼지 않고 주의 표시만 한다.
     """
-    table = pd.read_csv(path, dtype=str)
-    return dict(zip(table["inci_name"].str.strip().str.upper(), table["action"]))
+    table = pd.read_csv(path, dtype=str).fillna("")
+    return {
+        inci.strip().upper(): (action, ";".join(c for c in relax.split("|") if c))
+        for inci, action, relax in zip(table["inci_name"], table["action"], table["caution_with_concerns"])
+    }
 
 
 def reviewed_ingredient_ids(review_dir: Path) -> set[str]:
@@ -1051,8 +1054,10 @@ def main(
         for row in ingredient_rows:
             ing_id = str(row["ingredient_id:ID(Ingredient)"]).upper()
             row["evidence_reviewed:boolean"] = str(ing_id in reviewed_ids).lower()
-            row["sensitive_caution"] = caution_actions.get(ing_id, "")
-        ingredient_columns += ["evidence_reviewed:boolean", "sensitive_caution"]
+            action, relax = caution_actions.get(ing_id, ("", ""))
+            row["sensitive_caution"] = action
+            row["sensitive_caution_with:string[]"] = relax
+        ingredient_columns += ["evidence_reviewed:boolean", "sensitive_caution", "sensitive_caution_with:string[]"]
     write_csv(GOLD_NODES / "ingredient.csv", ingredient_columns, ingredient_rows)
 
     # ── inci_name 역방향 lookup (소문자 → inci_name) ─────────────────────

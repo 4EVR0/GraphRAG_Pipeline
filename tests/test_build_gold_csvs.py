@@ -470,9 +470,13 @@ class ReviewEdgesTest(unittest.TestCase):
 class ReviewConcernEdgesTest(unittest.TestCase):
     def test_sensitive_caution_actions_from_config(self) -> None:
         actions = build_gold_csvs.sensitive_caution_actions()
-        self.assertEqual({actions[k] for k in ("MENTHOL", "RETINOL", "PROPYLENE GLYCOL")}, {"exclude"})
-        self.assertEqual(actions["RETINYL PALMITATE"], "caution")
+        self.assertEqual({actions[k] for k in ("MENTHOL", "RETINOL", "PROPYLENE GLYCOL")}, {("exclude", "")})
+        self.assertEqual(actions["RETINYL PALMITATE"], ("caution", ""))
         self.assertNotIn("PANTHENOL", actions)
+        # 여드름 계열을 함께 요청하면 각질 제거 산은 주의 표시로 남긴다.
+        acne = "ACNE;COMEDONES;PORE_CONGESTION;ENLARGED_PORES;OILY_SKIN"
+        for inci in ("SALICYLIC ACID", "GLYCOLIC ACID", "LACTIC ACID", "MANDELIC ACID", "MALIC ACID", "AMMONIUM LACTATE"):
+            self.assertEqual(actions[inci], ("exclude", acne), inci)
 
     def test_concern_edges_filter_unknown_nodes(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
