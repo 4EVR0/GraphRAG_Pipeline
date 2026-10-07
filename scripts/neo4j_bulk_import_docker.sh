@@ -2,6 +2,9 @@
 # graph_schema.md — Docker neo4j-admin offline import (volume: neo4j_graphrag_data)
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# 고민별 논문 근거(#49)는 build_gold_csvs --review-dir로 만든 경우에만 있다.
+EXTRA_RELS=()
+[ -f "$ROOT/gold/edges/evidence_for.csv" ] && EXTRA_RELS+=(--relationships=EVIDENCE_FOR=/import/edges/evidence_for.csv)
 IMAGE="${NEO4J_IMAGE:-neo4j:5-community}"
 
 docker volume create neo4j_graphrag_data 2>/dev/null || true
@@ -18,6 +21,7 @@ docker run --rm \
   --relationships=CONTAINS=/import/edges/contains.csv \
   --relationships=AFFECTS=/import/edges/affects.csv \
   --relationships=RELATES_TO=/import/edges/relates_to.csv \
+  ${EXTRA_RELS[@]+"${EXTRA_RELS[@]}"} \
   --overwrite-destination \
   neo4j
 

@@ -750,7 +750,7 @@ def load_affects_rows(
 # CSV 쓰기
 # ---------------------------------------------------------------------------
 
-def upload_gold_to_s3(bucket: str) -> str:
+def upload_gold_to_s3(bucket: str, include_evidence_for: bool = False) -> str:
     """생성된 gold CSV 전체를 S3에 업로드하고 업로드 prefix를 반환합니다."""
     s3 = _s3_client()
     batch_tag = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -765,6 +765,9 @@ def upload_gold_to_s3(bucket: str) -> str:
         (GOLD_EDGES / "relates_to.csv",  f"{prefix}edges/relates_to.csv"),
         (GOLD_EDGES / "contains.csv",    f"{prefix}edges/contains.csv"),
     ]
+    # 이번 빌드에서 --review-dir로 만든 경우만 올린다(이전 실행의 파일이 섞이지 않게).
+    if include_evidence_for:
+        upload_targets.append((GOLD_EDGES / "evidence_for.csv", f"{prefix}edges/evidence_for.csv"))
 
     print(f"\n[S3] gold CSV 업로드 시작 → s3://{bucket}/{prefix}")
     for local_path, s3_key in upload_targets:
@@ -851,6 +854,95 @@ def retain_legacy_affects(
     ]
 
 
+SENSITIVE_CAUTIONS_CSV = ROOT / "config" / "review" / "sensitive_skin_cautions.csv"
+
+
+def sensitive_caution_actions(path: Path = SENSITIVE_CAUTIONS_CSV) -> dict[str, str]:
+    """민감 피부 계열 고민의 자극 우려 성분(#49) INCI → 조치(exclude|caution).
+
+    서버가 민감 계열 고민의 비논문 근거(도서·CosIng) 순위에서도 exclude는 거르고 caution은 표시할 수 있게
+    노드에 단다.
+    """
+    table = pd.read_csv(path, dtype=str)
+    return dict(zip(table["inci_name"].str.strip().str.upper(), table["action"]))
+
+
+def reviewed_ingredient_ids(review_dir: Path) -> set[str]:
+    """검수 출력의 review_ingredients.csv: 논문을 찾아 거르기·검수까지 거친 성분."""
+    return set(pd.read_csv(review_dir / "review_ingredients.csv", dtype=str)["ingredient_inci"].str.upper())
+
+
+def load_review_affects_rows(
+    review_dir: Path,
+    valid_ingredient_ids: set[str],
+    valid_effects: set[str],
+    min_human_papers: int = 1,
+) -> tuple[list[dict], set[str]]:
+    """LLM 근거 검수 결과(pipeline/review score 출력) → 논문 AFFECTS 엣지(#49).
+
+    서버는 논문 근거를 다른 근거보다 앞에 두므로, 사람 대상 연구가 min_human_papers편 이상인
+    엣지만 넣는다(시험관·동물만 있는 엣지가 참고 도서·CosIng보다 앞서지 않게).
+    두 번째 값은 검수한 성분 전체로, 이 성분들의 claim·과거 논문 엣지는 쓰지 않는다.
+    """
+    edges = pd.read_csv(review_dir / "review_edges.csv", dtype={"ingredient_inci": str, "effect_code": str})
+    reviewed = reviewed_ingredient_ids(review_dir)
+    rows, skipped = [], {"few_human_papers": 0, "unknown_ingredient": 0, "unknown_effect": 0}
+    for edge in edges.itertuples():
+        inci, effect = str(edge.ingredient_inci).upper(), str(edge.effect_code)
+        if int(edge.human_paper_count) < min_human_papers:
+            skipped["few_human_papers"] += 1
+            continue
+        if inci not in valid_ingredient_ids:
+            skipped["unknown_ingredient"] += 1
+            continue
+        if effect not in valid_effects:
+            skipped["unknown_effect"] += 1
+            continue
+        rows.append({
+            ":START_ID(Ingredient)": inci,
+            ":END_ID(Effect)": effect,
+            "type": "improves",
+            "evidence_type": "pubmed_evidence",
+            "graph_score:float": round(float(edge.score), 6),
+            "paper_count:int": int(edge.paper_count),
+        })
+    print(f"[review] 검수 성분 {len(reviewed)}개, 논문 엣지 {len(rows)}개 (제외 {skipped})")
+    return rows, reviewed & valid_ingredient_ids
+
+
+def load_review_concern_rows(
+    review_dir: Path,
+    valid_ingredient_ids: set[str],
+    valid_concerns: set[str],
+) -> list[dict]:
+    """고민별 근거(review_concern_edges.csv) → (Ingredient)-[:EVIDENCE_FOR]->(Concern) 엣지(#49).
+
+    고민마다 그 고민에 맞는 질환의 사람 대상 연구만 센 점수다. 효능 엣지는 질환을 구분하지 않아
+    다른 질환의 근거가 섞이므로(예: 건조증의 각질 제거 근거가 여드름 순위에 반영), 고민별 후보는
+    이 엣지를 먼저 보도록 서버를 바꾼다.
+    """
+    path = review_dir / "review_concern_edges.csv"
+    if not path.exists():
+        return []
+    edges = pd.read_csv(path, dtype={"ingredient_inci": str, "concern_code": str, "effects": str})
+    rows = [
+        {
+            ":START_ID(Ingredient)": str(e.ingredient_inci).upper(),
+            ":END_ID(Concern)": str(e.concern_code),
+            "evidence_type": "pubmed_review",
+            "graph_score:float": round(float(e.score), 6),
+            "paper_count:int": int(e.paper_count),
+            "effects": str(e.effects),
+            # 민감 계열 고민에서 계열·구성 성분으로 추정한 자극 우려(예: retinoid:class_inferred).
+            "caution": "" if pd.isna(getattr(e, "caution", None)) else str(getattr(e, "caution", "")),
+        }
+        for e in edges.itertuples()
+        if str(e.ingredient_inci).upper() in valid_ingredient_ids and str(e.concern_code) in valid_concerns
+    ]
+    print(f"[review] 고민별 근거 엣지 {len(rows)}개 (원본 {len(edges)}개)")
+    return rows
+
+
 # ---------------------------------------------------------------------------
 # 메인
 # ---------------------------------------------------------------------------
@@ -862,6 +954,8 @@ def main(
     no_upload: bool = False,
     claim_batch_id: str | None = None,
     refresh_targets: bool = False,
+    review_dir: Path | None = None,
+    review_min_human_papers: int = 1,
 ) -> None:
     print("=" * 60)
     print("Gold CSV 빌드 시작")
@@ -948,11 +1042,18 @@ def main(
             .to_dict("records")
         )
         print(f"[ingredient] 최신 상품 + 기존 graph union: {len(ingredient_rows)}개")
-    write_csv(
-        GOLD_NODES / "ingredient.csv",
-        ["ingredient_id:ID(Ingredient)", "inci_name", "kor_name", "cosing_functions:string[]"],
-        ingredient_rows,
-    )
+    ingredient_columns = ["ingredient_id:ID(Ingredient)", "inci_name", "kor_name", "cosing_functions:string[]"]
+    if review_dir is not None:
+        # 검수한 성분 표시(#49): 서버는 이 성분의 고민 순위를 EVIDENCE_FOR로만 매기고,
+        # 질환을 구분하지 않는 논문 AFFECTS 엣지로는 매기지 않는다.
+        reviewed_ids = reviewed_ingredient_ids(review_dir)
+        caution_actions = sensitive_caution_actions()
+        for row in ingredient_rows:
+            ing_id = str(row["ingredient_id:ID(Ingredient)"]).upper()
+            row["evidence_reviewed:boolean"] = str(ing_id in reviewed_ids).lower()
+            row["sensitive_caution"] = caution_actions.get(ing_id, "")
+        ingredient_columns += ["evidence_reviewed:boolean", "sensitive_caution"]
+    write_csv(GOLD_NODES / "ingredient.csv", ingredient_columns, ingredient_rows)
 
     # ── inci_name 역방향 lookup (소문자 → inci_name) ─────────────────────
     valid_ingredient_ids = {
@@ -1011,8 +1112,21 @@ def main(
         evaluated_ingredients=evaluated_ingredients,
     )
 
-    # ── COSING soft 엣지 (pubmed 엣지가 없는 성분·효과 쌍 보완) ──────────
     valid_effects = {r["effect_code"] for r in effect_rows}
+    if review_dir is not None:
+        # 검수한 성분은 claim 기반 논문 엣지를 검수 결과로 바꾼다(#49).
+        review_rows, reviewed = load_review_affects_rows(
+            review_dir,
+            {str(row["ingredient_id:ID(Ingredient)"]) for row in ingredient_rows},
+            valid_effects,
+            review_min_human_papers,
+        )
+        kept = [r for r in pubmed_rows if r[":START_ID(Ingredient)"] not in reviewed]
+        print(f"[review] claim 기반 논문 엣지 {len(pubmed_rows)}개 중 검수 성분 {len(pubmed_rows) - len(kept)}개 교체")
+        pubmed_rows = review_rows + kept
+        evaluated_ingredients |= reviewed
+
+    # ── COSING soft 엣지 (pubmed 엣지가 없는 성분·효과 쌍 보완) ──────────
     pubmed_seen: set[tuple] = {
         (r[":START_ID(Ingredient)"], r[":END_ID(Effect)"], r["type"])
         for r in pubmed_rows
@@ -1069,6 +1183,22 @@ def main(
         relates_rows,
     )
 
+    # ── evidence_for.csv (고민별 논문 근거, #49) ────────────────────────
+    # 검수 결과 없이 빌드하면 이전 실행의 파일을 지워, 적재 스크립트가 섞어 올리지 않게 한다.
+    if review_dir is None:
+        (GOLD_EDGES / "evidence_for.csv").unlink(missing_ok=True)
+    else:
+        write_csv(
+            GOLD_EDGES / "evidence_for.csv",
+            [":START_ID(Ingredient)", ":END_ID(Concern)", "evidence_type",
+             "graph_score:float", "paper_count:int", "effects", "caution"],
+            load_review_concern_rows(
+                review_dir,
+                {str(row["ingredient_id:ID(Ingredient)"]) for row in ingredient_rows},
+                valid_concerns,
+            ),
+        )
+
     # ── contains.csv (헤더만) ────────────────────────────────────────────
     write_csv(
         GOLD_EDGES / "contains.csv",
@@ -1084,7 +1214,7 @@ def main(
         print("=" * 60)
         return
 
-    s3_uri = upload_gold_to_s3(bucket)
+    s3_uri = upload_gold_to_s3(bucket, include_evidence_for=review_dir is not None)
     print()
     print("=" * 60)
     print(f"완료. Gold CSV → {s3_uri}")
@@ -1104,6 +1234,10 @@ if __name__ == "__main__":
                         help="정확히 하나의 Gold claim 배치만 사용")
     parser.add_argument("--no-upload", action="store_true",
                         help="S3 업로드를 건너뜀 (로컬 CSV만 생성)")
+    parser.add_argument("--review-dir", type=Path, default=None,
+                        help="LLM 근거 검수 출력 폴더(review_edges.csv, review_ingredients.csv). 검수한 성분의 논문 엣지를 교체")
+    parser.add_argument("--review-min-human-papers", type=int, default=1,
+                        help="그래프에 넣을 검수 엣지의 최소 사람 대상 논문 수")
     args = parser.parse_args()
     main(
         args.bucket,
@@ -1112,4 +1246,6 @@ if __name__ == "__main__":
         no_upload=args.no_upload,
         claim_batch_id=args.claim_batch_id,
         refresh_targets=args.refresh_targets,
+        review_dir=args.review_dir,
+        review_min_human_papers=args.review_min_human_papers,
     )
