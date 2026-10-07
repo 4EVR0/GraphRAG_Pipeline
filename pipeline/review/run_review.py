@@ -132,15 +132,16 @@ def _client(gateway: str = "anthropic"):
 
     import pipeline.common.config.settings  # noqa: F401  .env를 읽는다
 
+    # 응답이 brotli로 오면 Brotli<1.2 환경에서 SDK의 압축 해제가 실패해 연결 오류로 보인다
+    # (Anthropic API·BAZE 게이트웨이 모두). gzip만 받는다.
+    headers = {"Accept-Encoding": "gzip, deflate"}
     config = GATEWAYS[gateway]
     if config["base_url"] is None:
-        return anthropic.Anthropic()
+        return anthropic.Anthropic(default_headers=headers)
     key = os.environ.get(config["key_env"])
     if not key:
         raise SystemExit(f"{config['key_env']} is not set in .env")
-    # 게이트웨이가 brotli로 압축해 보내는데, Brotli<1.2 환경에서는 SDK의 압축 해제가 실패한다.
-    return anthropic.Anthropic(api_key=key, base_url=config["base_url"], max_retries=3,
-                               default_headers={"Accept-Encoding": "gzip, deflate"})
+    return anthropic.Anthropic(api_key=key, base_url=config["base_url"], max_retries=3, default_headers=headers)
 
 
 def _judge_rows(out_dir: Path, results: list[dict], model: str, effort: str | None, sha: str, run_id: str) -> None:
