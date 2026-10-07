@@ -854,6 +854,14 @@ def retain_legacy_affects(
     ]
 
 
+SENSITIVE_CAUTIONS_CSV = ROOT / "config" / "review" / "sensitive_skin_cautions.csv"
+
+
+def sensitive_caution_ids(path: Path = SENSITIVE_CAUTIONS_CSV) -> set[str]:
+    """민감 피부에 권하지 않는 성분(#49). 서버가 민감 계열 고민의 비논문 근거 순위에서도 거를 수 있게 노드에 표시한다."""
+    return set(pd.read_csv(path, dtype=str)["inci_name"].str.strip().str.upper())
+
+
 def reviewed_ingredient_ids(review_dir: Path) -> set[str]:
     """검수 출력의 review_ingredients.csv: 논문을 찾아 거르기·검수까지 거친 성분."""
     return set(pd.read_csv(review_dir / "review_ingredients.csv", dtype=str)["ingredient_inci"].str.upper())
@@ -1032,9 +1040,12 @@ def main(
         # 검수한 성분 표시(#49): 서버는 이 성분의 고민 순위를 EVIDENCE_FOR로만 매기고,
         # 질환을 구분하지 않는 논문 AFFECTS 엣지로는 매기지 않는다.
         reviewed_ids = reviewed_ingredient_ids(review_dir)
+        caution_ids = sensitive_caution_ids()
         for row in ingredient_rows:
-            row["evidence_reviewed:boolean"] = str(str(row["ingredient_id:ID(Ingredient)"]).upper() in reviewed_ids).lower()
-        ingredient_columns.append("evidence_reviewed:boolean")
+            ing_id = str(row["ingredient_id:ID(Ingredient)"]).upper()
+            row["evidence_reviewed:boolean"] = str(ing_id in reviewed_ids).lower()
+            row["sensitive_caution:boolean"] = str(ing_id in caution_ids).lower()
+        ingredient_columns += ["evidence_reviewed:boolean", "sensitive_caution:boolean"]
     write_csv(GOLD_NODES / "ingredient.csv", ingredient_columns, ingredient_rows)
 
     # ── inci_name 역방향 lookup (소문자 → inci_name) ─────────────────────

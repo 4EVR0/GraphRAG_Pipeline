@@ -1,9 +1,10 @@
 import unittest
 from pathlib import Path
 
-from pipeline.review.context import classify_conditions, load_concern_conditions, score_concerns
+from pipeline.review.context import classify_conditions, load_concern_conditions, load_sensitive_cautions, score_concerns
 
 CONFIG = Path(__file__).resolve().parents[1] / "config" / "review" / "concern_conditions.csv"
+CAUTIONS = CONFIG.with_name("sensitive_skin_cautions.csv")
 
 
 def _r(**kw) -> dict:
@@ -24,6 +25,13 @@ class ClassifyTest(unittest.TestCase):
         self.assertEqual(classify_conditions(_r(study_type="in_vitro")), {"nonhuman"})
         self.assertEqual(classify_conditions(_r(population="30 subjects")), {"unspecified"})
 
+    def test_sensitive_is_separate_from_induced_irritation(self) -> None:
+        self.assertEqual(classify_conditions(_r(population="60 women with sensitive, mildly photodamaged skin")),
+                         {"sensitive", "aging"})
+        self.assertEqual(classify_conditions(_r(population="patients with rosacea")), {"sensitive"})
+        self.assertEqual(classify_conditions(_r(population="healthy volunteers, UV-induced erythema")),
+                         {"healthy", "irritation", "photo"})
+
 
 class ConcernScoreTest(unittest.TestCase):
     def test_keratolytic_from_xerosis_does_not_count_for_acne(self) -> None:
@@ -43,6 +51,32 @@ class ConcernScoreTest(unittest.TestCase):
         self.assertEqual(acne["SALICYLIC ACID"]["paper_count"], 2)
         self.assertEqual(acne["SALICYLIC ACID"]["effects"], "BLEMISH_CARE|COMEDOLYTIC")
         self.assertIn(("UREA", "FLAKY_SKIN"), {(e["ingredient_inci"], e["concern_code"]) for e in edges})
+
+    def test_sensitive_skin_means_usable_on_sensitive_skin(self) -> None:
+        table = load_concern_conditions(CONFIG)
+        cautions = load_sensitive_cautions(CAUTIONS)
+        records = [
+            _r(pmid="1", ingredient_inci="PANTHENOL", effect_code="SOOTHING", population="subjects with sensitive skin"),
+            _r(pmid="2", ingredient_inci="GLYCERIN", effect_code="HYDRATING", population="healthy volunteers"),
+            _r(pmid="3", ingredient_inci="MENTHOL", effect_code="SOOTHING", population="subjects with sensitive skin"),
+            _r(pmid="4", ingredient_inci="UREA", effect_code="HYDRATING", population="children with atopic dermatitis"),
+        ]
+        _, edges = score_concerns(records, table, cautions=cautions)
+        pairs = {(e["ingredient_inci"], e["concern_code"]) for e in edges}
+        self.assertIn(("PANTHENOL", "SENSITIVE_SKIN"), pairs)
+        self.assertNotIn(("GLYCERIN", "SENSITIVE_SKIN"), pairs)
+        self.assertNotIn(("MENTHOL", "SENSITIVE_SKIN"), pairs)
+        self.assertNotIn(("UREA", "SENSITIVE_SKIN"), pairs)
+        # 주의 목록은 민감 계열 고민에만 적용된다.
+        self.assertIn(("UREA", "ATOPIC_PRONE"), pairs)
+
+    def test_cautions_have_reason_and_source(self) -> None:
+        import csv
+        with open(CAUTIONS, encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+        self.assertTrue(rows)
+        for row in rows:
+            self.assertTrue(row["reason"].strip() and row["source"].strip(), row["inci_name"])
 
     def test_config_covers_server_concerns(self) -> None:
         table = load_concern_conditions(CONFIG)

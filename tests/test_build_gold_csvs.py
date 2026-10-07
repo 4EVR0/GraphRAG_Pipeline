@@ -468,6 +468,11 @@ class ReviewEdgesTest(unittest.TestCase):
 
 
 class ReviewConcernEdgesTest(unittest.TestCase):
+    def test_sensitive_caution_ids_from_config(self) -> None:
+        ids = build_gold_csvs.sensitive_caution_ids()
+        self.assertTrue({"MENTHOL", "RETINOL", "PROPYLENE GLYCOL"} <= ids)
+        self.assertNotIn("PANTHENOL", ids)
+
     def test_concern_edges_filter_unknown_nodes(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

@@ -39,7 +39,7 @@ from pipeline.review.batch import (
     wait,
 )
 from pipeline.review.schema import ACNE_EFFECTS, effect_in_quote, prompt_sha
-from pipeline.review.context import load_concern_conditions, score_concerns
+from pipeline.review.context import load_concern_conditions, load_sensitive_cautions, score_concerns
 from pipeline.review.scoring import load_cosing_functions, load_mfds_functional, score_records
 from pipeline.review.screen import (
     DEFAULT_SCREEN_MODEL,
@@ -299,7 +299,8 @@ def cmd_score(args) -> None:
     mfds = load_mfds_functional(args.mfds) if args.mfds else None
     scored, edges = score_records(records, cosing, mfds)
     titles = {r["pmid"]: r.get("title") or "" for r in sources.values()}
-    scored, concern_edges = score_concerns(scored, load_concern_conditions(args.concern_conditions), titles)
+    scored, concern_edges = score_concerns(scored, load_concern_conditions(args.concern_conditions), titles,
+                                           load_sensitive_cautions(args.sensitive_cautions))
     write_csv(args.out_dir / "judgments_scored.csv", scored)
     write_csv(args.out_dir / "review_edges.csv", edges)
     write_csv(args.out_dir / "review_concern_edges.csv", concern_edges)
@@ -510,6 +511,9 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--concern-conditions", type=Path,
                    default=Path(__file__).resolve().parents[2] / "config" / "review" / "concern_conditions.csv",
                    help="고민별 효능·인정 질환 묶음(서버 CONCERN_EFFECT_MAP 기준)")
+    p.add_argument("--sensitive-cautions", type=Path,
+                   default=Path(__file__).resolve().parents[2] / "config" / "review" / "sensitive_skin_cautions.csv",
+                   help="민감 피부 계열 고민에서 뺄 자극 우려 성분(출처 포함)")
     p.add_argument("--model", default=None)
 
     p = sub.add_parser("human-sheet")

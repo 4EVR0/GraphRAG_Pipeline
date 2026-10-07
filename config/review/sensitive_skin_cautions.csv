@@ -1,0 +1,17 @@
+inci_name,caution_class,reason,source
+SALICYLIC ACID,exfoliating_acid,각질 제거 산. 산도가 낮을수록 피부 자극이 커진다,PMID 15725565; PMID 23495239
+GLYCOLIC ACID,exfoliating_acid,AHA. 햇빛 감수성을 높이고 부분 시험 사용이 권고된다,에센스 화장품학 p36 (식약처 AHA 함유 제품 사용 시 주의사항)
+LACTIC ACID,exfoliating_acid,AHA. 햇빛 감수성을 높이고 부분 시험 사용이 권고된다,에센스 화장품학 p36 (식약처 AHA 함유 제품 사용 시 주의사항)
+MANDELIC ACID,exfoliating_acid,AHA. 햇빛 감수성을 높이고 부분 시험 사용이 권고된다,에센스 화장품학 p36 (식약처 AHA 함유 제품 사용 시 주의사항)
+MALIC ACID,exfoliating_acid,AHA. 햇빛 감수성을 높이고 부분 시험 사용이 권고된다,에센스 화장품학 p36 (식약처 AHA 함유 제품 사용 시 주의사항)
+AMMONIUM LACTATE,exfoliating_acid,젖산염(AHA). 햇빛 감수성을 높이고 부분 시험 사용이 권고된다,에센스 화장품학 p36 (식약처 AHA 함유 제품 사용 시 주의사항)
+RETINOL,retinoid,레티노이드 자극(홍반·각질·따가움),PMID 36825199; PMID 28762645
+RETINAL,retinoid,레티노이드 자극(홍반·각질·따가움),PMID 36825199; PMID 28762645
+RETINYL PALMITATE,retinoid,레티노이드 계열. 레티놀보다 약하지만 같은 계열 자극 우려,PMID 36825199
+HYDROXYPINACOLONE RETINOATE,retinoid,레티노이드 계열. 레티놀보다 약하지만 같은 계열 자극 우려,PMID 36825199
+MENTHOL,cooling_agent,많은 양을 쓰면 피부 자극,에센스 화장품 성분과학 p217
+UREA,keratolytic_humectant,고농도에서 각질 용해와 자극. 손상 피부에서 따가움,에센스 화장품 성분과학 p115
+PROPYLENE GLYCOL,known_sensitizer,과민·알레르기 병력자는 신중히 사용하도록 표시 의무. 밀폐 시 경피 수분 손실 증가,에센스 화장품학 p34-39 (식약처 사용 시 주의사항); PMID 24063883; PMID 25305378
+LINALOOL,fragrance_allergen,향료 알레르기 유발 성분,에센스 화장품 성분과학 p234
+GERANIOL,fragrance_allergen,향료 알레르기 유발 성분,에센스 화장품 성분과학 p234
+LAVANDULA ANGUSTIFOLIA OIL,essential_oil,향료 알레르기 유발 성분(리날룰 등)을 함유한 정유,에센스 화장품 성분과학 p234
