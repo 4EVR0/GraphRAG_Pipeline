@@ -10,6 +10,8 @@
 - exclude: 직접 근거나 표시 의무가 있는 성분. 근거가 있어도 엣지를 만들지 않는다.
 - caution: 계열·구성 성분으로 추정한 성분. 엣지는 두고 caution 표시만 단다.
 목록에 없다고 '민감 피부에 안전함' 점수를 주지는 않는다.
+caution_with_concerns(예: 각질 제거 산의 여드름 계열)는 요청 시점 규칙이라 여기서는 쓰지 않고,
+그래프 노드(sensitive_caution_with)로 서버에 넘긴다. 민감 계열 고민의 근거 엣지에서는 계속 뺀다.
 """
 import csv
 import math

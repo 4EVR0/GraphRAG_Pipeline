@@ -84,6 +84,8 @@ class ConcernScoreTest(unittest.TestCase):
         for row in rows:
             self.assertTrue(row["reason"].strip() and row["source"].strip() and row["evidence_scope"].strip(),
                             row["inci_name"])
+            relax = {c for c in row["caution_with_concerns"].split("|") if c}
+            self.assertEqual(relax - set(load_concern_conditions(CONFIG)), set(), row["inci_name"])
             # 계열·구성 성분 추정만으로는 제외하지 않는다.
             if "inferred" in row["evidence_scope"]:
                 self.assertEqual(row["action"], "caution", row["inci_name"])
