@@ -20,4 +20,16 @@ VALUES
 ('AGING_SIGNS','Aging signs','노화 징후','aging','Wrinkles and loss of elasticity'),
 ('ATOPIC_PRONE','Atopic-prone skin','아토피 피부 경향','sensitivity','Skin prone to atopic dermatitis'),
 ('ROSACEA_PRONE','Rosacea-prone skin','주사 피부 경향','sensitivity','Skin prone to rosacea'),
-('POST_ACNE_MARKS','Post-acne marks','여드름 자국','pigmentation','Marks left after acne');
+('POST_ACNE_MARKS','Post-acne marks','여드름 자국','pigmentation','Marks left after acne'),
+-- 서버 Concern enum에만 있던 고민(#49 고민별 근거 엣지용)
+('PORE_CONGESTION','Pore congestion','모공 막힘','acne','Clogged pores'),
+('ENLARGED_PORES','Enlarged pores','넓은 모공','oil','Visibly enlarged pores'),
+('FLAKY_SKIN','Flaky skin','각질 들뜸','dryness','Visible flaking or scaling'),
+('ROUGH_TEXTURE','Rough texture','거친 피부결','dryness','Rough or uneven skin texture'),
+('UNEVEN_SKIN_TONE','Uneven skin tone','고르지 않은 피부 톤','pigmentation','Uneven skin color'),
+('BLEMISHES','Blemishes','잡티','pigmentation','Spots and marks'),
+('DARK_CIRCLES','Dark circles','다크서클','pigmentation','Dark under-eye circles'),
+('SUNBURN','Sunburn','햇볕 화상','protection','UV-induced skin damage'),
+('WRINKLES','Wrinkles','주름','aging','Fine lines and wrinkles'),
+('LOSS_OF_ELASTICITY','Loss of elasticity','탄력 저하','aging','Reduced skin elasticity'),
+('SAGGING_SKIN','Sagging skin','처짐','aging','Sagging or loose skin');

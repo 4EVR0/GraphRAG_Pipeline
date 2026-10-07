@@ -465,3 +465,29 @@ class ReviewEdgesTest(unittest.TestCase):
             legacy, {"PROCOLLAGEN"}, {"ANTI_AGING"}, set(), {"PROCOLLAGEN"},
         )
         self.assertEqual([r["evidence_type"] for r in kept], ["reference_book"])
+
+
+class ReviewConcernEdgesTest(unittest.TestCase):
+    def test_concern_edges_filter_unknown_nodes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            self.assertEqual(build_gold_csvs.load_review_concern_rows(root, {"UREA"}, {"ACNE"}), [])
+            pd.DataFrame([
+                {"ingredient_inci": "SALICYLIC ACID", "concern_code": "ACNE", "score": 2.1, "paper_count": 40,
+                 "effects": "BLEMISH_CARE|COMEDOLYTIC"},
+                {"ingredient_inci": "SALICYLIC ACID", "concern_code": "NOT_A_CONCERN", "score": 1.0, "paper_count": 1,
+                 "effects": "X"},
+                {"ingredient_inci": "UNKNOWN", "concern_code": "ACNE", "score": 1.0, "paper_count": 1, "effects": "X"},
+            ]).to_csv(root / "review_concern_edges.csv", index=False)
+            rows = build_gold_csvs.load_review_concern_rows(root, {"SALICYLIC ACID"}, {"ACNE"})
+        self.assertEqual(rows, [{
+            ":START_ID(Ingredient)": "SALICYLIC ACID", ":END_ID(Concern)": "ACNE", "evidence_type": "pubmed_review",
+            "graph_score:float": 2.1, "paper_count:int": 40, "effects": "BLEMISH_CARE|COMEDOLYTIC",
+        }])
+
+    def test_seed_has_all_server_concerns(self) -> None:
+        codes = {r["concern_code"] for r in build_gold_csvs.parse_concern_taxonomy()}
+        with open(Path(__file__).resolve().parents[1] / "config" / "review" / "concern_conditions.csv",
+                  encoding="utf-8") as handle:
+            configured = {row["concern_code"] for row in csv.DictReader(handle)}
+        self.assertEqual(configured - codes, set())

@@ -750,7 +750,7 @@ def load_affects_rows(
 # CSV 쓰기
 # ---------------------------------------------------------------------------
 
-def upload_gold_to_s3(bucket: str) -> str:
+def upload_gold_to_s3(bucket: str, include_evidence_for: bool = False) -> str:
     """생성된 gold CSV 전체를 S3에 업로드하고 업로드 prefix를 반환합니다."""
     s3 = _s3_client()
     batch_tag = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -765,6 +765,9 @@ def upload_gold_to_s3(bucket: str) -> str:
         (GOLD_EDGES / "relates_to.csv",  f"{prefix}edges/relates_to.csv"),
         (GOLD_EDGES / "contains.csv",    f"{prefix}edges/contains.csv"),
     ]
+    # 이번 빌드에서 --review-dir로 만든 경우만 올린다(이전 실행의 파일이 섞이지 않게).
+    if include_evidence_for:
+        upload_targets.append((GOLD_EDGES / "evidence_for.csv", f"{prefix}edges/evidence_for.csv"))
 
     print(f"\n[S3] gold CSV 업로드 시작 → s3://{bucket}/{prefix}")
     for local_path, s3_key in upload_targets:
@@ -889,6 +892,37 @@ def load_review_affects_rows(
         })
     print(f"[review] 검수 성분 {len(reviewed)}개, 논문 엣지 {len(rows)}개 (제외 {skipped})")
     return rows, reviewed & valid_ingredient_ids
+
+
+def load_review_concern_rows(
+    review_dir: Path,
+    valid_ingredient_ids: set[str],
+    valid_concerns: set[str],
+) -> list[dict]:
+    """고민별 근거(review_concern_edges.csv) → (Ingredient)-[:EVIDENCE_FOR]->(Concern) 엣지(#49).
+
+    고민마다 그 고민에 맞는 질환의 사람 대상 연구만 센 점수다. 효능 엣지는 질환을 구분하지 않아
+    다른 질환의 근거가 섞이므로(예: 건조증의 각질 제거 근거가 여드름 순위에 반영), 고민별 후보는
+    이 엣지를 먼저 보도록 서버를 바꾼다.
+    """
+    path = review_dir / "review_concern_edges.csv"
+    if not path.exists():
+        return []
+    edges = pd.read_csv(path, dtype={"ingredient_inci": str, "concern_code": str, "effects": str})
+    rows = [
+        {
+            ":START_ID(Ingredient)": str(e.ingredient_inci).upper(),
+            ":END_ID(Concern)": str(e.concern_code),
+            "evidence_type": "pubmed_review",
+            "graph_score:float": round(float(e.score), 6),
+            "paper_count:int": int(e.paper_count),
+            "effects": str(e.effects),
+        }
+        for e in edges.itertuples()
+        if str(e.ingredient_inci).upper() in valid_ingredient_ids and str(e.concern_code) in valid_concerns
+    ]
+    print(f"[review] 고민별 근거 엣지 {len(rows)}개 (원본 {len(edges)}개)")
+    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -1124,6 +1158,22 @@ def main(
         relates_rows,
     )
 
+    # ── evidence_for.csv (고민별 논문 근거, #49) ────────────────────────
+    # 검수 결과 없이 빌드하면 이전 실행의 파일을 지워, 적재 스크립트가 섞어 올리지 않게 한다.
+    if review_dir is None:
+        (GOLD_EDGES / "evidence_for.csv").unlink(missing_ok=True)
+    else:
+        write_csv(
+            GOLD_EDGES / "evidence_for.csv",
+            [":START_ID(Ingredient)", ":END_ID(Concern)", "evidence_type",
+             "graph_score:float", "paper_count:int", "effects"],
+            load_review_concern_rows(
+                review_dir,
+                {str(row["ingredient_id:ID(Ingredient)"]) for row in ingredient_rows},
+                valid_concerns,
+            ),
+        )
+
     # ── contains.csv (헤더만) ────────────────────────────────────────────
     write_csv(
         GOLD_EDGES / "contains.csv",
@@ -1139,7 +1189,7 @@ def main(
         print("=" * 60)
         return
 
-    s3_uri = upload_gold_to_s3(bucket)
+    s3_uri = upload_gold_to_s3(bucket, include_evidence_for=review_dir is not None)
     print()
     print("=" * 60)
     print(f"완료. Gold CSV → {s3_uri}")

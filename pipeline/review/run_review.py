@@ -39,6 +39,7 @@ from pipeline.review.batch import (
     wait,
 )
 from pipeline.review.schema import ACNE_EFFECTS, effect_in_quote, prompt_sha
+from pipeline.review.context import load_concern_conditions, score_concerns
 from pipeline.review.scoring import load_cosing_functions, load_mfds_functional, score_records
 from pipeline.review.screen import (
     DEFAULT_SCREEN_MODEL,
@@ -297,14 +298,17 @@ def cmd_score(args) -> None:
     cosing = load_cosing_functions(args.cosing_gold) if args.cosing_gold else None
     mfds = load_mfds_functional(args.mfds) if args.mfds else None
     scored, edges = score_records(records, cosing, mfds)
+    titles = {r["pmid"]: r.get("title") or "" for r in sources.values()}
+    scored, concern_edges = score_concerns(scored, load_concern_conditions(args.concern_conditions), titles)
     write_csv(args.out_dir / "judgments_scored.csv", scored)
     write_csv(args.out_dir / "review_edges.csv", edges)
+    write_csv(args.out_dir / "review_concern_edges.csv", concern_edges)
     # 논문을 찾아 거르기·검수까지 거친 성분은 엣지가 없어도 '검수함'으로 남겨, 그래프 빌드에서
     # 과거 논문 엣지를 되살리지 않게 한다. 검색 결과가 0편인 성분은 평가하지 못했으므로 넣지 않는다.
     reviewed = sorted({r["ingredient"].upper() for r in read_jsonl(args.out_dir / SOURCES_FILE)})
     write_csv(args.out_dir / "review_ingredients.csv", [{"ingredient_inci": inci} for inci in reviewed])
     used = sum(1 for r in scored if r["weight"] > 0)
-    print(f"[score] judgments={len(scored)} weighted>0={used} edges={len(edges)} "
+    print(f"[score] judgments={len(scored)} weighted>0={used} edges={len(edges)} concern_edges={len(concern_edges)} "
           f"cosing={'yes' if cosing else 'no'} mfds={'yes' if mfds else 'no'}")
 
 
@@ -503,6 +507,9 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--out-dir", type=Path, required=True)
     p.add_argument("--cosing-gold", type=Path, default=None, help="KCIA↔CosIng Gold CSV(inci_name, cosing_functions)")
     p.add_argument("--mfds", type=Path, default=None, help="식약처 기능성 고시 원료 CSV(inci_name, function, effect_codes)")
+    p.add_argument("--concern-conditions", type=Path,
+                   default=Path(__file__).resolve().parents[2] / "config" / "review" / "concern_conditions.csv",
+                   help="고민별 효능·인정 질환 묶음(서버 CONCERN_EFFECT_MAP 기준)")
     p.add_argument("--model", default=None)
 
     p = sub.add_parser("human-sheet")
