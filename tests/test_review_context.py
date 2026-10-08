@@ -21,6 +21,15 @@ class ClassifyTest(unittest.TestCase):
                          {"keratinization", "other_disease"})
         self.assertIn("atopic", classify_conditions(_r(population="children with atopic dermatitis")))
         self.assertNotIn("atopic", classify_conditions(_r(population="patients with seborrheic dermatitis")))
+        # 자극성 피부염은 아토피가 아니다.
+        self.assertEqual(classify_conditions(_r(population="84 neonates with candidial napkin dermatitis")),
+                         {"irritation"})
+        self.assertEqual(classify_conditions(_r(population="workers with occupational hand dermatitis")),
+                         {"irritation"})
+        self.assertIn("atopic", classify_conditions(_r(population="34 adults with dry, eczema-prone skin")))
+        # 연구 유형이 코호트여도 동물 대상이면 사람 연구가 아니다.
+        self.assertEqual(classify_conditions(_r(population="21 dairy cows with bovine digital dermatitis",
+                                                study_type="cohort")), {"nonhuman"})
         self.assertEqual(classify_conditions(_r(population="", study_type="review"), "Melasma treatments"), {"pigment"})
         self.assertEqual(classify_conditions(_r(study_type="in_vitro")), {"nonhuman"})
         self.assertEqual(classify_conditions(_r(population="30 subjects")), {"unspecified"})
@@ -89,6 +98,17 @@ class ConcernScoreTest(unittest.TestCase):
             # 계열·구성 성분 추정만으로는 제외하지 않는다.
             if "inferred" in row["evidence_scope"]:
                 self.assertEqual(row["action"], "caution", row["inci_name"])
+
+    def test_sunburn_counts_only_photo_studies(self) -> None:
+        table = load_concern_conditions(CONFIG)
+        records = [
+            _r(pmid="1", ingredient_inci="UREA", effect_code="SOOTHING", population="healthy volunteers with normal skin"),
+            _r(pmid="2", ingredient_inci="TOCOPHEROL", effect_code="PHOTOPROTECTIVE",
+               population="healthy volunteers, UV-induced erythema"),
+        ]
+        _, edges = score_concerns(records, table)
+        sunburn = {e["ingredient_inci"] for e in edges if e["concern_code"] == "SUNBURN"}
+        self.assertEqual({"TOCOPHEROL"}, sunburn)
 
     def test_config_covers_server_concerns(self) -> None:
         table = load_concern_conditions(CONFIG)

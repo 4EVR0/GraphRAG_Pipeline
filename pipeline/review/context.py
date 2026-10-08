@@ -19,7 +19,7 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
-CONTEXT_RULES_VERSION = "condition-context-v3"
+CONTEXT_RULES_VERSION = "condition-context-v4"
 
 # 질환 묶음. 한 판정이 여러 묶음에 들 수 있다(예: 아토피 환자의 건조증).
 CONDITION_PATTERNS = {
@@ -31,12 +31,14 @@ CONDITION_PATTERNS = {
              r"sagging|laxity|mature skin|postmenopausal|elderly|older (wom|adult|subject)",
     "photo": r"\buv[ab]?\b|ultraviolet|sunburn|solar simulat|sun[- ]exposed|photoprotect|\bspf\b|\bmed\b",
     "dry": r"xerosis|dry skin|dryness|\bdry\b|dehydrat|ichthyosis|flak|scaling|rough skin",
-    "atopic": r"atopic|eczema|(?<!seborrheic )(?<!seborrhoeic )dermatitis",
+    # 아토피·습진만. 기저귀·손·접촉 피부염 같은 자극성 피부염은 irritation으로 보낸다.
+    "atopic": r"atopic|eczema",
     # 민감 피부로 모집한 대상. 'sensitive, mild ... skin'처럼 쉼표로 이어진 표현도 잡는다.
     "sensitive": r"sensitive[- ]?skin|\bsensitive,|skin sensitivity|allergy-prone|reactive skin|stinging|rosacea|"
                  r"couperose|telangiect",
     # 자극을 일부러 준 피부나 홍반(자외선 홍반 포함). 민감 피부 자체와는 구분한다.
-    "irritation": r"irritat|erythema|redness",
+    "irritation": r"irritat|erythema|redness|"
+                  r"(diaper|napkin|incontinence[- ]associated|hand|occupational|contact) dermatitis",
     "keratinization": r"keratosis pilaris|hyperkeratosis|callus|calluses|\bheels?\b|\bfeet\b|\bfoot\b|plantar|keratoderma",
     "scar": r"\bscar|atrophic|wound|ulcer|post-?(laser|procedure|operative)|surgical",
     "other_disease": r"psoriasis|actinic keratos|alopecia|tinea|onychomycosis|vitiligo|diabetic|cancer|"
@@ -44,11 +46,15 @@ CONDITION_PATTERNS = {
     "healthy": r"healthy|normal skin|volunteer",
 }
 HUMAN_STUDIES = frozenset({"rct", "cohort", "case_series", "review"})
+# 연구 유형이 사람 대상이어도 대상이 동물이면 사람 연구로 세지 않는다(예: 소 발굽 피부염 코호트).
+ANIMAL_POPULATION = r"\b(bovine|canine|feline|equine|porcine|cows?|cattle|dogs?|cats?|horses?|pigs?|mice|rats?)\b"
 
 
 def classify_conditions(record: dict, title: str = "") -> set[str]:
     """판정의 연구 대상 질환 묶음. 사람 대상이 아니면 {'nonhuman'}, 단서가 없으면 {'unspecified'}."""
     if record.get("study_type") not in HUMAN_STUDIES:
+        return {"nonhuman"}
+    if re.search(ANIMAL_POPULATION, (record.get("population") or "").lower()):
         return {"nonhuman"}
     text = f"{record.get('population') or ''} {title or ''}".lower()
     found = {name for name, pattern in CONDITION_PATTERNS.items() if re.search(pattern, text)}
