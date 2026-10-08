@@ -1,17 +1,17 @@
 inci_name,caution_class,action,condition,caution_with_concerns,evidence_scope,reason,source
 SALICYLIC ACID,exfoliating_acid,exclude,산도가 낮거나 농도가 높을 때,ACNE|COMEDONES|PORE_CONGESTION|ENLARGED_PORES|OILY_SKIN,direct_human;policy,"각질 제거 산. 산도가 낮을수록 피부 자극이 커진다. 제품의 산도·농도 정보가 없어 민감 계열에서는 보수적으로 제외(운영 정책). 여드름 계열 고민을 함께 요청하면 빼지 않고 주의 표시(저농도·씻어내는 제품부터, 다른 각질 제거제와 겹치지 않게)",PMID 15725565(사람); PMID 23495239(생쥐)
-GLYCOLIC ACID,exfoliating_acid,exclude,AHA 0.5% 초과 제품,ACNE|COMEDONES|PORE_CONGESTION|ENLARGED_PORES|OILY_SKIN,regulatory;policy,"햇빛 감수성 증가와 부분 시험 사용이 표시 의무. 농도·산도 정보가 없어 민감 계열에서는 보수적으로 제외(운영 정책). 여드름 계열 고민을 함께 요청하면 빼지 않고 주의 표시(저농도·씻어내는 제품부터, 다른 각질 제거제와 겹치지 않게)",에센스 화장품학 p36 (식약처 AHA 함유 제품 사용 시 주의사항)
-LACTIC ACID,exfoliating_acid,exclude,AHA 0.5% 초과 제품,ACNE|COMEDONES|PORE_CONGESTION|ENLARGED_PORES|OILY_SKIN,regulatory;policy,"햇빛 감수성 증가와 부분 시험 사용이 표시 의무. 농도·산도 정보가 없어 민감 계열에서는 보수적으로 제외(운영 정책). 여드름 계열 고민을 함께 요청하면 빼지 않고 주의 표시(저농도·씻어내는 제품부터, 다른 각질 제거제와 겹치지 않게)",에센스 화장품학 p36 (식약처 AHA 함유 제품 사용 시 주의사항)
-MANDELIC ACID,exfoliating_acid,exclude,AHA 0.5% 초과 제품,ACNE|COMEDONES|PORE_CONGESTION|ENLARGED_PORES|OILY_SKIN,regulatory;policy,"햇빛 감수성 증가와 부분 시험 사용이 표시 의무. 농도·산도 정보가 없어 민감 계열에서는 보수적으로 제외(운영 정책). 여드름 계열 고민을 함께 요청하면 빼지 않고 주의 표시(저농도·씻어내는 제품부터, 다른 각질 제거제와 겹치지 않게)",에센스 화장품학 p36 (식약처 AHA 함유 제품 사용 시 주의사항)
-MALIC ACID,exfoliating_acid,exclude,AHA 0.5% 초과 제품,ACNE|COMEDONES|PORE_CONGESTION|ENLARGED_PORES|OILY_SKIN,regulatory;policy,"햇빛 감수성 증가와 부분 시험 사용이 표시 의무. 농도·산도 정보가 없어 민감 계열에서는 보수적으로 제외(운영 정책). 여드름 계열 고민을 함께 요청하면 빼지 않고 주의 표시(저농도·씻어내는 제품부터, 다른 각질 제거제와 겹치지 않게)",에센스 화장품학 p36 (식약처 AHA 함유 제품 사용 시 주의사항)
-AMMONIUM LACTATE,exfoliating_acid,exclude,AHA 0.5% 초과 제품,ACNE|COMEDONES|PORE_CONGESTION|ENLARGED_PORES|OILY_SKIN,regulatory;policy,"젖산염(AHA). 햇빛 감수성 증가와 부분 시험 사용이 표시 의무. 농도 정보가 없어 민감 계열에서는 보수적으로 제외(운영 정책). 여드름 계열 고민을 함께 요청하면 빼지 않고 주의 표시(저농도·씻어내는 제품부터, 다른 각질 제거제와 겹치지 않게)",에센스 화장품학 p36 (식약처 AHA 함유 제품 사용 시 주의사항)
+GLYCOLIC ACID,exfoliating_acid,exclude,AHA 0.5% 초과 제품,ACNE|COMEDONES|PORE_CONGESTION|ENLARGED_PORES|OILY_SKIN,regulatory;policy,"햇빛 감수성 증가와 부분 시험 사용이 표시 의무. 농도·산도 정보가 없어 민감 계열에서는 보수적으로 제외(운영 정책). 여드름 계열 고민을 함께 요청하면 빼지 않고 주의 표시(저농도·씻어내는 제품부터, 다른 각질 제거제와 겹치지 않게)",참고 교재 2 p36 (식약처 AHA 함유 제품 사용 시 주의사항)
+LACTIC ACID,exfoliating_acid,exclude,AHA 0.5% 초과 제품,ACNE|COMEDONES|PORE_CONGESTION|ENLARGED_PORES|OILY_SKIN,regulatory;policy,"햇빛 감수성 증가와 부분 시험 사용이 표시 의무. 농도·산도 정보가 없어 민감 계열에서는 보수적으로 제외(운영 정책). 여드름 계열 고민을 함께 요청하면 빼지 않고 주의 표시(저농도·씻어내는 제품부터, 다른 각질 제거제와 겹치지 않게)",참고 교재 2 p36 (식약처 AHA 함유 제품 사용 시 주의사항)
+MANDELIC ACID,exfoliating_acid,exclude,AHA 0.5% 초과 제품,ACNE|COMEDONES|PORE_CONGESTION|ENLARGED_PORES|OILY_SKIN,regulatory;policy,"햇빛 감수성 증가와 부분 시험 사용이 표시 의무. 농도·산도 정보가 없어 민감 계열에서는 보수적으로 제외(운영 정책). 여드름 계열 고민을 함께 요청하면 빼지 않고 주의 표시(저농도·씻어내는 제품부터, 다른 각질 제거제와 겹치지 않게)",참고 교재 2 p36 (식약처 AHA 함유 제품 사용 시 주의사항)
+MALIC ACID,exfoliating_acid,exclude,AHA 0.5% 초과 제품,ACNE|COMEDONES|PORE_CONGESTION|ENLARGED_PORES|OILY_SKIN,regulatory;policy,"햇빛 감수성 증가와 부분 시험 사용이 표시 의무. 농도·산도 정보가 없어 민감 계열에서는 보수적으로 제외(운영 정책). 여드름 계열 고민을 함께 요청하면 빼지 않고 주의 표시(저농도·씻어내는 제품부터, 다른 각질 제거제와 겹치지 않게)",참고 교재 2 p36 (식약처 AHA 함유 제품 사용 시 주의사항)
+AMMONIUM LACTATE,exfoliating_acid,exclude,AHA 0.5% 초과 제품,ACNE|COMEDONES|PORE_CONGESTION|ENLARGED_PORES|OILY_SKIN,regulatory;policy,"젖산염(AHA). 햇빛 감수성 증가와 부분 시험 사용이 표시 의무. 농도 정보가 없어 민감 계열에서는 보수적으로 제외(운영 정책). 여드름 계열 고민을 함께 요청하면 빼지 않고 주의 표시(저농도·씻어내는 제품부터, 다른 각질 제거제와 겹치지 않게)",참고 교재 2 p36 (식약처 AHA 함유 제품 사용 시 주의사항)
 RETINOL,retinoid,exclude,,,direct_human,사람 대상 비교시험에서 홍반 유발,PMID 28762645(사람); PMID 36825199(생쥐)
 RETINAL,retinoid,caution,,,class_inferred,레티노이드 계열 추정. 레티날 자체의 사람 대상 자극 근거는 아직 연결하지 않음,계열 추정(레티놀 근거 PMID 28762645 준용)
 RETINYL PALMITATE,retinoid,caution,,,class_inferred,레티노이드 계열 추정. 이 성분의 사람 대상 자극 근거는 아직 연결하지 않음,계열 추정(레티놀 근거 PMID 28762645 준용)
 HYDROXYPINACOLONE RETINOATE,retinoid,caution,,,class_inferred,레티노이드 계열 추정. 이 성분의 사람 대상 자극 근거는 아직 연결하지 않음,계열 추정(레티놀 근거 PMID 28762645 준용)
-MENTHOL,cooling_agent,exclude,많은 양을 쓸 때,,direct_textbook;policy,많은 양에서 피부 자극. 농도 정보가 없어 민감 계열에서는 보수적으로 제외(운영 정책),에센스 화장품 성분과학 p217
-UREA,keratolytic_humectant,exclude,따가움·긁힌 피부·급성 악화 또는 고농도,,direct_textbook;policy,고농도에서 자극이 있고 손상 피부에서 따가울 수 있다. 피부 상태·농도 정보가 없어 민감 계열에서만 보수적으로 제외(운영 정책). 아토피·건조 고민에는 후보로 남김,에센스 화장품 성분과학 p115
-PROPYLENE GLYCOL,known_sensitizer,exclude,과민·알레르기 병력,,regulatory;direct_human,과민·알레르기 병력자는 신중히 사용하도록 표시 의무. 사람 피부에 밀폐 적용 시 경피 수분 손실 증가,에센스 화장품학 p34-39 (식약처 사용 시 주의사항); PMID 24063883; PMID 25305378
-LINALOOL,fragrance_allergen,exclude,,,direct_textbook,향료 알레르기 유발 성분,에센스 화장품 성분과학 p234
-GERANIOL,fragrance_allergen,exclude,,,direct_textbook,향료 알레르기 유발 성분,에센스 화장품 성분과학 p234
-LAVANDULA ANGUSTIFOLIA OIL,essential_oil,caution,,,component_inferred,향료 알레르기 성분(리날룰 등)을 함유한 정유로 추정. 정유 자체의 근거는 아직 연결하지 않음,구성 성분 추정(성분과학 p234 리날룰)
+MENTHOL,cooling_agent,exclude,많은 양을 쓸 때,,direct_textbook;policy,많은 양에서 피부 자극. 농도 정보가 없어 민감 계열에서는 보수적으로 제외(운영 정책),참고 교재 1 p217
+UREA,keratolytic_humectant,exclude,따가움·긁힌 피부·급성 악화 또는 고농도,,direct_textbook;policy,고농도에서 자극이 있고 손상 피부에서 따가울 수 있다. 피부 상태·농도 정보가 없어 민감 계열에서만 보수적으로 제외(운영 정책). 아토피·건조 고민에는 후보로 남김,참고 교재 1 p115
+PROPYLENE GLYCOL,known_sensitizer,exclude,과민·알레르기 병력,,regulatory;direct_human,과민·알레르기 병력자는 신중히 사용하도록 표시 의무. 사람 피부에 밀폐 적용 시 경피 수분 손실 증가,참고 교재 2 p34-39 (식약처 사용 시 주의사항); PMID 24063883; PMID 25305378
+LINALOOL,fragrance_allergen,exclude,,,direct_textbook,향료 알레르기 유발 성분,참고 교재 1 p234
+GERANIOL,fragrance_allergen,exclude,,,direct_textbook,향료 알레르기 유발 성분,참고 교재 1 p234
+LAVANDULA ANGUSTIFOLIA OIL,essential_oil,caution,,,component_inferred,향료 알레르기 성분(리날룰 등)을 함유한 정유로 추정. 정유 자체의 근거는 아직 연결하지 않음,구성 성분 추정(참고 교재 1 p234 리날룰)
